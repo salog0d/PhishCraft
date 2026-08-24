@@ -6,15 +6,18 @@ Run locally with:
 
 from fastapi import FastAPI
 
-from app.presentation.routes import router as analysis_router
+from app.presentation.routes import router as generation_router
 
 app = FastAPI(
     title="PhishingAgent API",
     version="0.1.0",
-    description="Service that accepts emails and analyses them for phishing.",
+    description=(
+        "Configurable, reproducible generator of synthetic phishing-simulation "
+        "campaigns over email and SMS, for authorized security-awareness research."
+    ),
 )
 
-app.include_router(analysis_router)
+app.include_router(generation_router)
 
 
 @app.get("/health", tags=["meta"])

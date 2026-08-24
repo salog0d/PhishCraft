@@ -1,13 +1,32 @@
-"""Pydantic schemas for the phishing-simulation pipeline.
+"""Pydantic schemas for the phishing-campaign **generator**.
+
+Scope
+-----
+This project is a *configurable, reproducible generator* of synthetic
+phishing-simulation campaigns over two channels — **email and SMS**. Its
+scientific contribution is not measuring whether a message deceives a victim,
+but whether the generator **reliably and reproducibly satisfies the campaign
+constraints**. There is therefore no interaction-tracking, KPI, or
+success-optimization feedback loop in these contracts.
 
 This module is the single source of truth for the system's data contracts:
 
-* The **generation contract** (``PhishingGenerationRequest`` / ``Response``)
-  validated at the API boundary for authorized security-awareness simulations.
-* The **agentic flow contracts** — one model per hand-off between agents
-  (Phases 0-7, documented in ``docs/flow-schema.md``) — each enforcing its
-  business rules and carrying a ``PersistencePolicy`` describing how its
-  artifacts may be stored.
+* The **generation contract** (``PhishingGenerationRequest`` / ``Response`` and
+  ``GeneratedMessage``) validated at the API boundary for authorized
+  security-awareness simulations.
+* The **model-adapter contracts** (``ModelSpec`` / ``ModelPolicy`` /
+  ``GenerationParams``) that let the generator target **at least two model
+  families** so results are comparable and reproducible across families.
+* The **coherence contracts** (``GeneratedCampaign`` / ``CoherenceReport``) that
+  enforce, across a multi-message campaign, a consistent impersonated persona
+  ("the CEO is the same everywhere"), a coherent send timeline, and the
+  existence of every cross-channel reference.
+* The **provenance contracts** (``GenerationProvenance`` / ``ProvenanceLog``)
+  that record which model, prompt, parameters, and seed produced each artifact,
+  making every generation reproducible.
+* The remaining **flow contracts** — one model per hand-off between stages
+  (documented in ``docs/flow-schema.md``) — each carrying a
+  ``PersistencePolicy`` describing how its artifacts may be stored.
 """
 
 from __future__ import annotations
@@ -29,12 +48,19 @@ from pydantic import (
 
 
 # =========================================================================== #
-# Generation contract (API boundary)
+# Shared value types & enums
 # =========================================================================== #
 
 
+class Channel(str, Enum):
+    """Delivery channels in scope. Voice is intentionally excluded."""
+
+    EMAIL = "email"
+    SMS = "sms"
+
+
 class Pretext(str, Enum):
-    """The social-engineering scenario the email is built around."""
+    """The social-engineering scenario the message is built around."""
 
     PASSWORD_RESET = "password_reset"
     INVOICE_PAYMENT = "invoice_payment"
@@ -56,7 +82,7 @@ class CallToActionType(str, Enum):
 
 
 class Difficulty(str, Enum):
-    """How many red flags the generated email exposes."""
+    """How many red flags the generated message exposes."""
 
     EASY = "easy"
     MEDIUM = "medium"
@@ -71,7 +97,7 @@ class Tone(str, Enum):
 
 
 class Recipient(BaseModel):
-    """Target of the simulation, used to personalize the email."""
+    """Target of the simulation, used to personalize the message."""
 
     email: EmailStr
     full_name: Optional[str] = Field(default=None, max_length=120)
@@ -80,7 +106,7 @@ class Recipient(BaseModel):
 
 
 class SenderPersona(BaseModel):
-    """The identity the email appears to come from."""
+    """The identity a message appears to come from."""
 
     display_name: str = Field(..., min_length=1, max_length=120)
     from_address: EmailStr
@@ -100,18 +126,128 @@ class CallToAction(BaseModel):
     button_label: Optional[str] = Field(default=None, max_length=60)
 
 
+# =========================================================================== #
+# Model adapters (the core: at least two model families)
+# =========================================================================== #
+
+
+class ModelFamily(str, Enum):
+    """Supported LLM adapter families. A campaign must exercise >= 2 of these
+    so the generator's constraint-satisfaction can be compared across families."""
+
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
+    MISTRAL = "mistral"
+    LLAMA = "llama"
+    LOCAL = "local"
+
+
+class ModelSpec(BaseModel, frozen=True):
+    """One concrete adapter target: a family + a model name + adapter version.
+
+    Frozen so it is hashable and can be compared / de-duplicated by family."""
+
+    family: ModelFamily
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=80,
+        description="Provider model id, e.g. 'claude-opus-5' or 'gpt-4.1'.",
+    )
+    adapter_version: str = Field(
+        default="1.0",
+        pattern=r"^\d+\.\d+(\.\d+)?$",
+        description="Version of the local adapter wrapping this model.",
+    )
+
+
+class GenerationParams(BaseModel):
+    """Decoding parameters. ``seed`` makes a generation reproducible."""
+
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    top_p: float = Field(default=1.0, ge=0.0, le=1.0)
+    max_tokens: int = Field(default=1024, ge=1, le=32768)
+    seed: int = Field(
+        ...,
+        ge=0,
+        description="Fixed seed; same request + model + seed must reproduce output.",
+    )
+
+
+# =========================================================================== #
+# Shared identifier types (business rule: IDs are prefixed and well-formed)
+# =========================================================================== #
+
+CampaignId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,64}$")]
+TargetId = Annotated[str, StringConstraints(pattern=r"^tgt-\d{4,}$")]
+ProfileId = Annotated[str, StringConstraints(pattern=r"^prf-\d{4,}$")]
+TemplateId = Annotated[str, StringConstraints(pattern=r"^tpl-\d{4,}$")]
+AssetId = Annotated[str, StringConstraints(pattern=r"^ast-\d{4,}$")]
+MessageId = Annotated[str, StringConstraints(pattern=r"^msg-\d{4,}$")]
+BatchId = Annotated[str, StringConstraints(pattern=r"^bat-\d{2,}$")]
+Locale = Annotated[str, StringConstraints(pattern=r"^[a-z]{2}(-[A-Z]{2})?$")]
+Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
+SandboxRef = Annotated[str, StringConstraints(pattern=r"^sandbox://[\w./-]+$")]
+
+
+def _require_unique(ids: list[str], label: str) -> None:
+    """Business rule helper: reject duplicate identifiers in a collection."""
+    if len(ids) != len(set(ids)):
+        raise ValueError(f"duplicate {label} detected")
+
+
+# =========================================================================== #
+# Provenance (reproducibility log)
+# =========================================================================== #
+
+
+class GenerationProvenance(BaseModel):
+    """Everything needed to reproduce one generated artifact."""
+
+    model: ModelSpec
+    params: GenerationParams
+    prompt_template_id: TemplateId
+    prompt_hash: Sha256Hex = Field(
+        ..., description="sha256 of the fully-rendered prompt actually sent."
+    )
+    generated_at: datetime
+    adapter_latency_ms: Optional[int] = Field(default=None, ge=0)
+    runtime: dict[str, str] = Field(
+        default_factory=dict,
+        description="Library/runtime versions (e.g. {'sdk': '0.40.0'}).",
+    )
+
+    @field_validator("generated_at")
+    @classmethod
+    def _must_be_timezone_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("generated_at must be timezone-aware (UTC)")
+        return value
+
+
+# =========================================================================== #
+# Generation contract (API boundary)
+# =========================================================================== #
+
+
 class PhishingGenerationRequest(BaseModel):
-    """Everything the engine needs to generate one simulation email."""
+    """Everything the engine needs to generate one simulation message.
+
+    Channel-shaped: ``subject_hint`` and ``include_tracking_pixel`` apply to
+    email only; an SMS request must leave them unset/false."""
 
     campaign_id: str = Field(..., min_length=1, max_length=64)
     authorized: bool = Field(
         ...,
         description="Must be true; caller attests the campaign is authorized.",
     )
+    channel: Channel = Channel.EMAIL
     recipient: Recipient
     sender: SenderPersona
     pretext: Pretext
     call_to_action: CallToAction
+    model: ModelSpec
+    params: GenerationParams
     tone: Tone = Tone.NEUTRAL
     difficulty: Difficulty = Difficulty.MEDIUM
     language: str = Field(
@@ -122,15 +258,27 @@ class PhishingGenerationRequest(BaseModel):
     subject_hint: Optional[str] = Field(
         default=None,
         max_length=200,
-        description="Optional steer for the subject line; engine may override.",
+        description="Email only: optional steer for the subject line.",
     )
     include_tracking_pixel: bool = True
+
+    @model_validator(mode="after")
+    def _email_only_fields(self) -> "PhishingGenerationRequest":
+        if self.channel != Channel.EMAIL:
+            if self.subject_hint is not None:
+                raise ValueError("subject_hint applies to the email channel only")
+            if self.include_tracking_pixel:
+                raise ValueError(
+                    "include_tracking_pixel applies to the email channel only"
+                )
+        return self
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "campaign_id": "q3-awareness-2026",
                 "authorized": True,
+                "channel": "email",
                 "recipient": {
                     "email": "employee@example.com",
                     "full_name": "Jordan Lee",
@@ -147,6 +295,17 @@ class PhishingGenerationRequest(BaseModel):
                     "type": "click_link",
                     "landing_url": "https://sim.example-corp.com/t/abc123",
                     "button_label": "Reset Password",
+                },
+                "model": {
+                    "family": "anthropic",
+                    "name": "claude-opus-5",
+                    "adapter_version": "1.0",
+                },
+                "params": {
+                    "temperature": 0.7,
+                    "top_p": 1.0,
+                    "max_tokens": 1024,
+                    "seed": 42,
                 },
                 "tone": "urgent",
                 "difficulty": "medium",
@@ -174,43 +333,154 @@ class PhishingGenerationResponse(BaseModel):
     message: str = "Generation request accepted."
 
 
+class GeneratedMessage(BaseModel):
+    """One message produced by the generator, with its provenance attached."""
+
+    message_id: MessageId
+    channel: Channel
+    scheduled_at: datetime
+    sender: SenderPersona
+    subject: Optional[str] = Field(default=None, max_length=200)
+    body: str = Field(..., min_length=1, max_length=20_000)
+    call_to_action: CallToAction
+    references: list[MessageId] = Field(
+        default_factory=list,
+        description="Ids of earlier messages this one refers to (cross-channel).",
+    )
+    provenance: GenerationProvenance
+
+    @field_validator("scheduled_at")
+    @classmethod
+    def _must_be_timezone_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("scheduled_at must be timezone-aware (UTC)")
+        return value
+
+    @model_validator(mode="after")
+    def _channel_shaped(self) -> "GeneratedMessage":
+        if self.channel == Channel.EMAIL and not self.subject:
+            raise ValueError("email messages require a subject")
+        if self.channel == Channel.SMS:
+            if self.subject:
+                raise ValueError("sms messages must not carry a subject")
+            if len(self.body) > 1600:
+                raise ValueError("sms body exceeds 1600 characters")
+        if self.message_id in self.references:
+            raise ValueError("a message cannot reference itself")
+        return self
+
+
 # =========================================================================== #
-# Agentic flow contracts (see docs/flow-schema.md)
+# Coherence contracts (persona / timing / cross-channel references)
 # =========================================================================== #
 
 
-# --------------------------------------------------------------------------- #
-# Shared identifier types (business rule: IDs are prefixed and well-formed)
-# --------------------------------------------------------------------------- #
+class ImpersonatedPersona(BaseModel, frozen=True):
+    """The single impersonated identity a campaign speaks as (e.g. the CEO).
 
-CampaignId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,64}$")]
-TargetId = Annotated[str, StringConstraints(pattern=r"^tgt-\d{4,}$")]
-ProfileId = Annotated[str, StringConstraints(pattern=r"^prf-\d{4,}$")]
-TemplateId = Annotated[str, StringConstraints(pattern=r"^tpl-\d{4,}$")]
-AssetId = Annotated[str, StringConstraints(pattern=r"^ast-\d{4,}$")]
-EventId = Annotated[str, StringConstraints(pattern=r"^evt-\d{4,}$")]
-BatchId = Annotated[str, StringConstraints(pattern=r"^bat-\d{2,}$")]
-Locale = Annotated[str, StringConstraints(pattern=r"^[a-z]{2}(-[A-Z]{2})?$")]
-# A field *name* (not a value): lower snake_case, so captured PII values can
-# never masquerade as field names in an InteractionResult.
-FieldName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,39}$")]
-SandboxRef = Annotated[str, StringConstraints(pattern=r"^sandbox://[\w./-]+$")]
+    Frozen so it can be compared by value against every message's sender."""
+
+    display_name: str = Field(..., min_length=1, max_length=120)
+    email: EmailStr
+    role: Optional[str] = Field(default=None, max_length=120)
+    department: Optional[str] = Field(default=None, max_length=120)
+    organization: Optional[str] = Field(default=None, max_length=120)
+
+
+class GeneratedCampaign(BaseModel):
+    """A coherent multi-channel bundle of generated messages for one persona.
+
+    Enforces the three coherence rules that are this project's contribution:
+    persona identity, send timing, and cross-channel reference existence."""
+
+    PERSISTENCE: ClassVar["PersistencePolicy"]
+
+    campaign_id: CampaignId
+    persona: ImpersonatedPersona
+    messages: list[GeneratedMessage] = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def _coherent(self) -> "GeneratedCampaign":
+        _require_unique([m.message_id for m in self.messages], "message_id")
+
+        # 1. Persona identity coherence -- the impersonated identity (the CEO)
+        #    must be the same in every message's sender.
+        for m in self.messages:
+            if (
+                m.sender.display_name != self.persona.display_name
+                or str(m.sender.from_address) != str(self.persona.email)
+            ):
+                raise ValueError(
+                    f"message {m.message_id} sender does not match the campaign "
+                    f"persona '{self.persona.display_name}'"
+                )
+
+        by_id = {m.message_id: m for m in self.messages}
+        for m in self.messages:
+            for ref in m.references:
+                # 2. Cross-channel reference existence.
+                if ref not in by_id:
+                    raise ValueError(
+                        f"message {m.message_id} references unknown message {ref}"
+                    )
+                # 3. Timing coherence -- a follow-up cannot precede what it cites.
+                if by_id[ref].scheduled_at > m.scheduled_at:
+                    raise ValueError(
+                        f"message {m.message_id} is scheduled before the message "
+                        f"{ref} it references"
+                    )
+        return self
+
+
+class CoherenceCheck(str, Enum):
+    PERSONA_IDENTITY = "persona_identity"
+    TIMING = "timing"
+    CROSS_CHANNEL_REFERENCE = "cross_channel_reference"
+
+
+class CoherenceCheckResult(BaseModel):
+    check: CoherenceCheck
+    passed: bool
+    detail: Optional[str] = Field(default=None, max_length=200)
+
+
+class CoherenceReport(BaseModel):
+    """The recorded outcome of validating a ``GeneratedCampaign``.
+
+    This is the evidence artifact for 'the generator satisfies its
+    constraints' -- the project's reproducible result, not a victim metric."""
+
+    PERSISTENCE: ClassVar["PersistencePolicy"]
+
+    campaign_id: CampaignId
+    results: list[CoherenceCheckResult] = Field(..., min_length=3)
+    all_passed: bool
+
+    @model_validator(mode="after")
+    def _report_is_consistent(self) -> "CoherenceReport":
+        covered = {r.check for r in self.results}
+        if covered != set(CoherenceCheck):
+            raise ValueError("report must cover every coherence check exactly once")
+        if len(self.results) != len(covered):
+            raise ValueError("duplicate coherence check in report")
+        if self.all_passed != all(r.passed for r in self.results):
+            raise ValueError("all_passed must match the individual check results")
+        return self
+
+
+# =========================================================================== #
+# Flow contracts (see docs/flow-schema.md)
+# =========================================================================== #
 
 
 class Agent(str, Enum):
-    RECON = "Recon-AG"
-    HARVEST = "Harvest-AG"
-    DESIGN = "Design-AG"
-    PAYLOAD = "Payload-AG"
-    RESPONDER = "Responder-AG"
+    """Generator-centric stages (no attack-execution or monitoring agents)."""
+
     ORCHESTRATOR = "Orchestrator-AG"
-    MONITOR = "Monitor-AG"
-
-
-class Channel(str, Enum):
-    EMAIL = "email"
-    SMS = "sms"
-    VOICE = "voice"
+    RECON = "Recon-AG"            # synthetic targets/domains (SyntheticTargetSet)
+    PROFILER = "Profiler-AG"      # synthetic recipient profiles (ProfileDataset)
+    GENERATOR = "Generator-AG"    # LLM generation via model-family adapters
+    VALIDATOR = "Validator-AG"    # coherence checks + provenance recording
 
 
 # --------------------------------------------------------------------------- #
@@ -223,7 +493,6 @@ class PiiClass(str, Enum):
 
     NONE = "none"
     SYNTHETIC = "synthetic"   # synthetic personal-shaped data
-    SENSITIVE = "sensitive"   # interaction outcomes; field names only
 
 
 class PersistencePolicy(BaseModel, frozen=True):
@@ -236,10 +505,14 @@ class PersistencePolicy(BaseModel, frozen=True):
     encrypted_at_rest: bool = True
 
 
-def _require_unique(ids: list[str], label: str) -> None:
-    """Business rule helper: reject duplicate identifiers in a collection."""
-    if len(ids) != len(set(ids)):
-        raise ValueError(f"duplicate {label} detected")
+# Coherence/provenance artifacts declared above receive their policy here, once
+# PersistencePolicy exists.
+GeneratedCampaign.PERSISTENCE = PersistencePolicy(
+    store="generated-campaigns", retention_days=365, pii=PiiClass.SYNTHETIC
+)
+CoherenceReport.PERSISTENCE = PersistencePolicy(
+    store="coherence-reports", retention_days=365, pii=PiiClass.NONE
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -248,7 +521,7 @@ def _require_unique(ids: list[str], label: str) -> None:
 
 
 class MessageEnvelope(BaseModel):
-    """Transport wrapper for every inter-agent message."""
+    """Transport wrapper for every inter-stage message."""
 
     PERSISTENCE: ClassVar[PersistencePolicy] = PersistencePolicy(
         store="bus-audit-log", retention_days=90, pii=PiiClass.NONE
@@ -257,7 +530,7 @@ class MessageEnvelope(BaseModel):
     message_id: UUID = Field(default_factory=uuid4)
     schema_version: str = Field(default="1.0", pattern=r"^\d+\.\d+$")
     campaign_id: CampaignId
-    phase: int = Field(..., ge=0, le=7)
+    phase: int = Field(..., ge=0, le=4)
     from_agent: Agent
     to_agent: Agent
     emitted_at: datetime
@@ -300,7 +573,7 @@ class MissionScope(BaseModel):
 class MissionConstraints(BaseModel):
     synthetic_data_only: bool
     channels: list[Channel] = Field(..., min_length=1)
-    max_interactions_per_target: int = Field(..., ge=1, le=20)
+    max_messages_per_persona: int = Field(..., ge=1, le=20)
 
     @field_validator("synthetic_data_only")
     @classmethod
@@ -314,6 +587,29 @@ class MissionConstraints(BaseModel):
     def _channels_unique(cls, value: list[Channel]) -> list[Channel]:
         _require_unique([c.value for c in value], "channel")
         return value
+
+
+class ModelPolicy(BaseModel):
+    """The models a campaign may use. Requires at least two distinct families
+    so the generator's behaviour can be compared and reproduced across them."""
+
+    models: list[ModelSpec] = Field(..., min_length=2)
+
+    @model_validator(mode="after")
+    def _at_least_two_families(self) -> "ModelPolicy":
+        families = {m.family for m in self.models}
+        if len(families) < 2:
+            raise ValueError(
+                "model_policy must reference at least two distinct model families"
+            )
+        return self
+
+
+class ReproducibilityPolicy(BaseModel):
+    """Reproducibility guarantees for the campaign."""
+
+    seed: int = Field(..., ge=0)
+    deterministic: bool = True
 
 
 class MissionEthics(BaseModel):
@@ -338,6 +634,8 @@ class MissionConfig(BaseModel):
     objective: str = Field(..., min_length=1, max_length=120)
     scope: MissionScope
     constraints: MissionConstraints
+    model_policy: ModelPolicy
+    reproducibility: ReproducibilityPolicy
     ethics: MissionEthics
 
     @field_validator("authorized")
@@ -349,7 +647,7 @@ class MissionConfig(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Phase 1 -- SyntheticTargetSet
+# Phase 1 -- SyntheticTargetSet (Profiler-AG)
 # --------------------------------------------------------------------------- #
 
 
@@ -398,7 +696,7 @@ class SyntheticTargetSet(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Phase 2 -- ProfileDataset
+# Phase 1 -- ProfileDataset (Profiler-AG)
 # --------------------------------------------------------------------------- #
 
 
@@ -437,11 +735,13 @@ class ProfileDataset(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Phase 3 -- TemplateSet (Design-AG)
+# Phase 2 -- TemplateSet (prompt templates the generator conditions on)
 # --------------------------------------------------------------------------- #
 
 
 class Template(BaseModel):
+    """A seed/prompt template. ``prompt_template_id`` in provenance points here."""
+
     template_id: TemplateId
     channel: Channel
     pretext: Pretext
@@ -475,7 +775,7 @@ class TemplateSet(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Phase 3 -- PayloadAssets (Payload-AG)
+# Phase 2 -- PayloadAssets (tracking links / sandboxed attachments)
 # --------------------------------------------------------------------------- #
 
 
@@ -532,7 +832,7 @@ class PayloadAssets(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Phase 4 -- DeploymentManifest
+# Phase 3 -- DeploymentManifest (the generation/dispatch plan)
 # --------------------------------------------------------------------------- #
 
 
@@ -575,222 +875,14 @@ class DeploymentManifest(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Phase 5 -- InteractionEvent
+# Phase 4 -- ProvenanceLog (append-only reproducibility record)
 # --------------------------------------------------------------------------- #
 
 
-class CallDirection(str, Enum):
-    INBOUND = "inbound"
-    OUTBOUND = "outbound"
-
-
-class InteractionContext(BaseModel):
-    call_direction: Optional[CallDirection] = None
-    transcript_ref: Optional[SandboxRef] = None
-
-
-class InteractionEvent(BaseModel):
+class ProvenanceLog(BaseModel):
     PERSISTENCE: ClassVar[PersistencePolicy] = PersistencePolicy(
-        store="interaction-log", retention_days=365, pii=PiiClass.SENSITIVE
+        store="provenance-log", retention_days=730, pii=PiiClass.NONE
     )
 
     campaign_id: CampaignId
-    event_id: EventId
-    generation_id: UUID
-    profile_id: ProfileId
-    channel: Channel
-    action: CallToActionType
-    occurred_at: datetime
-    context: InteractionContext = Field(default_factory=InteractionContext)
-
-    @field_validator("occurred_at")
-    @classmethod
-    def _must_be_timezone_aware(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("occurred_at must be timezone-aware (UTC)")
-        return value
-
-    @model_validator(mode="after")
-    def _call_direction_only_for_voice(self) -> "InteractionEvent":
-        if self.context.call_direction and self.channel != Channel.VOICE:
-            raise ValueError("call_direction only applies to the voice channel")
-        return self
-
-
-# --------------------------------------------------------------------------- #
-# Phase 5 -- InteractionResult
-# --------------------------------------------------------------------------- #
-
-
-class Card(str, Enum):
-    A = "A"
-    B = "B"
-    C = "C"
-
-
-class CardType(str, Enum):
-    CREDENTIALS = "credentials"
-    FAKE_SUPPORT = "fake_support"
-    VERIFICATION_FORM = "verification_form"
-
-
-class Outcome(str, Enum):
-    SUBMITTED = "submitted"
-    IGNORED = "ignored"
-    REPORTED = "reported"
-    BOUNCED = "bounced"
-
-
-_CARD_TO_TYPE = {
-    Card.A: CardType.CREDENTIALS,
-    Card.B: CardType.FAKE_SUPPORT,
-    Card.C: CardType.VERIFICATION_FORM,
-}
-
-
-class InteractionResult(BaseModel):
-    PERSISTENCE: ClassVar[PersistencePolicy] = PersistencePolicy(
-        store="interaction-log", retention_days=365, pii=PiiClass.SENSITIVE
-    )
-
-    campaign_id: CampaignId
-    event_id: EventId
-    profile_id: ProfileId
-    selected_card: Card
-    card_type: CardType
-    channel: Channel
-    outcome: Outcome
-    # Persistence rule: field NAMES only -- captured values are never stored.
-    captured_fields: list[FieldName] = Field(default_factory=list)
-    response_ref: Optional[SandboxRef] = None
-    logged_at: datetime
-
-    @field_validator("logged_at")
-    @classmethod
-    def _must_be_timezone_aware(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("logged_at must be timezone-aware (UTC)")
-        return value
-
-    @model_validator(mode="after")
-    def _card_matches_type(self) -> "InteractionResult":
-        if _CARD_TO_TYPE[self.selected_card] != self.card_type:
-            raise ValueError(
-                f"card_type must be {_CARD_TO_TYPE[self.selected_card].value} "
-                f"for card {self.selected_card.value}"
-            )
-        if self.outcome != Outcome.SUBMITTED and self.captured_fields:
-            raise ValueError("captured_fields is only valid when outcome=submitted")
-        return self
-
-
-# --------------------------------------------------------------------------- #
-# Phase 6 -- MetricsReport
-# --------------------------------------------------------------------------- #
-
-
-class ReportWindow(BaseModel):
-    from_: datetime = Field(..., alias="from")
-    to: datetime
-
-    model_config = {"populate_by_name": True}
-
-    @model_validator(mode="after")
-    def _window_ordered_and_aware(self) -> "ReportWindow":
-        if self.from_.tzinfo is None or self.to.tzinfo is None:
-            raise ValueError("window bounds must be timezone-aware (UTC)")
-        if self.to < self.from_:
-            raise ValueError("window 'to' must not precede 'from'")
-        return self
-
-
-class CampaignKpis(BaseModel):
-    delivered: int = Field(..., ge=0)
-    opened: int = Field(..., ge=0)
-    clicked: int = Field(..., ge=0)
-    converted: int = Field(..., ge=0)
-    reported_as_spam: int = Field(..., ge=0)
-    delivery_rate: float = Field(..., ge=0.0, le=1.0)
-    open_rate: float = Field(..., ge=0.0, le=1.0)
-    click_rate: float = Field(..., ge=0.0, le=1.0)
-    conversion_rate: float = Field(..., ge=0.0, le=1.0)
-    bounce_rate: float = Field(..., ge=0.0, le=1.0)
-
-    @model_validator(mode="after")
-    def _funnel_is_monotonic(self) -> "CampaignKpis":
-        # A recipient cannot open without delivery, click without opening, etc.
-        if not (self.converted <= self.clicked <= self.opened <= self.delivered):
-            raise ValueError(
-                "funnel must be monotonic: "
-                "converted <= clicked <= opened <= delivered"
-            )
-        if self.reported_as_spam > self.delivered:
-            raise ValueError("reported_as_spam cannot exceed delivered")
-        return self
-
-
-class MetricsReport(BaseModel):
-    PERSISTENCE: ClassVar[PersistencePolicy] = PersistencePolicy(
-        store="metrics-warehouse", retention_days=730, pii=PiiClass.NONE
-    )
-
-    campaign_id: CampaignId
-    window: ReportWindow
-    kpis: CampaignKpis
-    anomalies: list[str] = Field(default_factory=list)
-    exploit_successful: bool
-
-
-# --------------------------------------------------------------------------- #
-# Phase 7 -- FeedbackDirective
-# --------------------------------------------------------------------------- #
-
-
-class DirectiveAction(str, Enum):
-    OPTIMIZE_TEMPLATES = "optimize_templates"
-    UPDATE_PROFILES = "update_profiles"
-    ADJUST_PARAMETERS = "adjust_parameters"
-
-
-_ACTION_TO_AGENT = {
-    DirectiveAction.OPTIMIZE_TEMPLATES: Agent.DESIGN,
-    DirectiveAction.UPDATE_PROFILES: Agent.HARVEST,
-    DirectiveAction.ADJUST_PARAMETERS: Agent.ORCHESTRATOR,
-}
-
-
-class FeedbackItem(BaseModel):
-    target_agent: Agent
-    action: DirectiveAction
-    reason: Optional[str] = Field(default=None, max_length=120)
-    template_ids: list[TemplateId] = Field(default_factory=list)
-    profile_ids: list[ProfileId] = Field(default_factory=list)
-    observed: dict[str, bool] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def _action_targets_correct_agent(self) -> "FeedbackItem":
-        expected = _ACTION_TO_AGENT[self.action]
-        if self.target_agent != expected:
-            raise ValueError(
-                f"action {self.action.value} must target {expected.value}"
-            )
-        return self
-
-
-class FeedbackDirective(BaseModel):
-    PERSISTENCE: ClassVar[PersistencePolicy] = PersistencePolicy(
-        store="feedback-log", retention_days=365, pii=PiiClass.NONE
-    )
-
-    campaign_id: CampaignId
-    exploit_successful: bool
-    directives: list[FeedbackItem] = Field(..., min_length=1)
-    parameter_adjustments: dict[str, str] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def _failure_requires_adjustments(self) -> "FeedbackDirective":
-        if not self.exploit_successful and not self.parameter_adjustments:
-            raise ValueError(
-                "parameter_adjustments are required when exploit_successful is false"
-            )
-        return self
+    entries: list[GenerationProvenance] = Field(..., min_length=1)
