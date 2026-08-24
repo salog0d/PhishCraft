@@ -1,6 +1,6 @@
 # [Project Name]
 
-> A multi-agent, CLI-driven pipeline for **authorized** phishing-simulation research — built for security-awareness training and red-team exercises in controlled, isolated environments.
+> A configurable, reproducible **generator** of synthetic phishing-simulation campaigns over **email and SMS**, for **authorized** security-awareness research in controlled, isolated environments.
 
 <!-- Replace [owner]/[repo] with your repository path before publishing. -->
 [![CI](https://img.shields.io/github/actions/workflow/status/[owner]/[repo]/ci.yml?branch=main&label=CI)](https://github.com/[owner]/[repo]/actions)
@@ -13,16 +13,18 @@
 
 ## Introduction
 
-**[Project Name]** orchestrates a set of cooperating agents that plan, generate, deliver, and measure simulated phishing campaigns end to end — entirely from the command line.
+**[Project Name]** orchestrates a set of cooperating stages that plan, generate, and verify simulated phishing campaigns — entirely from the command line.
 
-**Problem.** Running realistic security-awareness simulations by hand is slow, inconsistent, and hard to measure. Teams need a reproducible way to generate varied, well-labeled campaigns and track engagement — **without ever touching real victim data or live infrastructure.**
+**Problem.** Running realistic security-awareness simulations by hand is slow and inconsistent. Teams need a reproducible way to generate varied, well-labeled campaigns that provably satisfy their constraints — **without ever touching real victim data or live infrastructure.** The contribution here is a generator whose output is *reproducible* (fixed seed, logged provenance) and *coherent* (persona, timing, and cross-channel references hold), verified rather than measured against victims.
 
 **Key features**
 
-- **Multi-agent pipeline** — Recon, Harvest, Design, Payload, Responder, Orchestrator, and Monitor agents, each with a single responsibility.
-- **Synthetic-only data** — target catalogs and victim profiles are generated internally; no external OSINT tools or live collection.
-- **CLI-first workflow** — drive every phase (`recon → harvest → design → launch → monitor`) from one command-line entrypoint.
-- **Multi-channel responder** — automated response handling across email, SMS, and voice-call scenarios.
+- **Generation pipeline** — Orchestrator, Recon, Profiler, Generator, and Validator stages, each with a single responsibility.
+- **Two channels** — email and SMS (voice is out of scope).
+- **Multi-model adapters** — generate through at least two model families so results are comparable and reproducible across families.
+- **Coherence validators** — a consistent impersonated persona, a coherent send timeline, and existing cross-channel references, all enforced in the schema.
+- **Provenance log** — model, parameters, seed, and prompt hash recorded for every artifact.
+- **Synthetic-only data** — target catalogs and recipient profiles are generated internally; no external OSINT tools or live collection.
 - **Built-in authorization gate** — every campaign must be attested as authorized before generation runs.
 
 ---
@@ -69,22 +71,24 @@ Run a full simulation pipeline against a synthetic dataset from the CLI:
 # Initialize a workspace and a sample config
 [cli-name] init ./my-campaign
 
-# Generate a synthetic target dataset (no external data is collected)
-[cli-name] recon --count 50 --output targets.json
+# Generate synthetic targets/domains (no external data is collected)
+[cli-name] recon --region latam --sector finance --count 50 --output targets.json
 
-# Build synthetic recipient profiles
-[cli-name] harvest --input targets.json --output profiles.json
+# Build synthetic recipient profiles from the targets
+[cli-name] profile --input targets.json --output profiles.json
 
-# Generate a campaign (authorization is required)
+# Generate a campaign across email + SMS (authorization is required)
 [cli-name] generate \
     --profiles profiles.json \
-    --pretext password_reset \
+    --channels email,sms \
+    --pretext executive_request \
     --difficulty medium \
+    --model anthropic:claude-opus-5 --model openai:gpt-4.1 \
+    --seed 42 \
     --authorized
 
-# Launch and monitor
-[cli-name] launch --campaign campaign.json
-[cli-name] monitor --campaign-id [campaign-id]
+# Verify coherence and write the provenance log
+[cli-name] validate --campaign campaign.json
 ```
 
 Prefer the HTTP service? The same engine is exposed as an API:
@@ -133,11 +137,18 @@ cp .env.example .env
 environment: dev
 data_dir: ./data
 require_authorization: true
-agents:
+channels: [email, sms]
+reproducibility:
+  seed: 42
+model_policy:
+  models:
+    - { family: anthropic, name: claude-opus-5 }
+    - { family: openai, name: gpt-4.1 }
+stages:
   recon:
     synthetic_count: 50
-  responder:
-    channels: [email, sms, voice]
+  profiler:
+    profiles_per_target: 5
 ```
 
 ---

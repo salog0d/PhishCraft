@@ -1,42 +1,53 @@
 # Flow Schema — JSON Contracts
 
-JSON data contracts for the full agentic flow of **[Project Name]**. Each hand-off between agents (Phases 0–7) is defined below as a versioned contract with a concrete synthetic example.
+JSON data contracts for the **campaign generator**. Each hand-off between stages
+(Phases 0–4) is a versioned contract with a concrete synthetic example. The
+generator covers **email and SMS**; it produces content and verifies coherence,
+and does **not** track victim interaction or campaign KPIs.
 
-> **Scope.** All data is **synthetic and generated internally**. Every payload carries the campaign authorization attestation; downstream agents must reject any message where `authorized` is `false` or `synthetic_data_only` is not honored.
+> **Scope.** All data is **synthetic and generated internally**. Every payload
+> carries the campaign authorization attestation; downstream stages must reject
+> any message where `authorized` is `false` or `synthetic_data_only` is not
+> honored.
 
 ---
 
 ## Conventions
 
-- **Transport envelope.** Every inter-agent message is wrapped in the [Message Envelope](#message-envelope); the agent-specific contract lives under `payload`.
+- **Transport envelope.** Every inter-stage message is wrapped in the
+  [Message Envelope](#message-envelope); the stage-specific contract lives under
+  `payload`.
 - **Timestamps.** ISO 8601, UTC, `Z` suffix (e.g. `2026-08-20T09:00:00Z`).
-- **Identifiers.** `campaign_id` is a caller-supplied slug (`^[A-Za-z0-9._-]{1,64}$`); all others are prefixed IDs (`tgt-`, `prf-`, `tpl-`, `ast-`, `evt-`) or UUIDv4 (`generation_id`).
+- **Identifiers.** `campaign_id` is a caller-supplied slug
+  (`^[A-Za-z0-9._-]{1,64}$`); others are prefixed (`tgt-`, `prf-`, `tpl-`,
+  `ast-`, `msg-`, `bat-`) or UUIDv4 (`generation_id`).
 - **Versioning.** `schema_version` uses SemVer; this document describes `1.0`.
-- **Enums** mirror `app/core/schemas.py`: `pretext`, `call_to_action.type`, `tone`, `difficulty`.
+- **Enums** mirror `app/core/schemas.py`: `channel` ∈ {`email`, `sms`},
+  `pretext`, `call_to_action.type`, `tone`, `difficulty`, `model.family`.
 
 ### Contract index
 
 | # | Contract | Producer | Consumer | Phase |
 |---|----------|----------|----------|-------|
-| — | `MessageEnvelope` | any agent | any agent | all |
+| — | `MessageEnvelope` | any stage | any stage | all |
 | 1 | `MissionConfig` | Orchestrator-AG | pipeline | 0 |
-| 2 | `SyntheticTargetSet` | Recon-AG | Harvest-AG | 1 |
-| 3 | `ProfileDataset` | Harvest-AG | Design-AG, Payload-AG | 2 |
-| 4 | `TemplateSet` | Design-AG | Orchestrator-AG | 3 |
-| 5 | `PayloadAssets` | Payload-AG | Orchestrator-AG | 3 |
-| 6 | `DeploymentManifest` | Orchestrator-AG | Responder-AG | 4 |
-| 6a | `PhishingGenerationRequest` | Orchestrator-AG | generation engine | 4 |
-| 6b | `PhishingGenerationResponse` | generation engine | Orchestrator-AG | 4 |
-| 7 | `InteractionEvent` | channel gateway | Responder-AG | 5 |
-| 8 | `InteractionResult` | Responder-AG | Monitor-AG | 5 |
-| 9 | `MetricsReport` | Monitor-AG | Orchestrator-AG | 6 |
-| 10 | `FeedbackDirective` | Monitor-AG / Orchestrator-AG | Design-AG, Harvest-AG | 7 |
+| 2 | `SyntheticTargetSet` | Recon-AG | Profiler-AG | 1 |
+| 3 | `ProfileDataset` | Profiler-AG | Generator-AG | 2 |
+| 4 | `TemplateSet` | Profiler-AG | Generator-AG | 2 |
+| 5 | `PayloadAssets` | Profiler-AG | Generator-AG | 2 |
+| 6 | `PhishingGenerationRequest` | Orchestrator-AG | Generator-AG | 3 |
+| 6b | `PhishingGenerationResponse` | Generator-AG | Orchestrator-AG | 3 |
+| 7 | `GeneratedMessage` | Generator-AG | Validator-AG | 3 |
+| 8 | `DeploymentManifest` | Orchestrator-AG | Generator-AG | 3 |
+| 9 | `GeneratedCampaign` | Validator-AG | store | 4 |
+| 10 | `CoherenceReport` | Validator-AG | store | 4 |
+| 11 | `ProvenanceLog` | Validator-AG | store | 4 |
 
 ---
 
 ## Message Envelope
 
-Common wrapper for every message on the agent bus.
+Common wrapper for every message on the stage bus.
 
 ```json
 {
@@ -45,7 +56,7 @@ Common wrapper for every message on the agent bus.
   "campaign_id": "q3-awareness-2026",
   "phase": 1,
   "from_agent": "Recon-AG",
-  "to_agent": "Harvest-AG",
+  "to_agent": "Profiler-AG",
   "emitted_at": "2026-08-19T14:30:00Z",
   "authorized": true,
   "payload": { "contract": "SyntheticTargetSet", "...": "..." }
@@ -54,17 +65,16 @@ Common wrapper for every message on the agent bus.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `message_id` | UUIDv4 | Unique per message. |
-| `phase` | integer 0–7 | Pipeline phase that emitted the message. |
-| `from_agent` / `to_agent` | string | Agent name (`Recon-AG`, …). |
+| `phase` | integer 0–4 | Pipeline phase that emitted the message. |
+| `from_agent` / `to_agent` | enum | `Orchestrator-AG`, `Recon-AG`, `Profiler-AG`, `Generator-AG`, `Validator-AG`; must differ. |
 | `authorized` | boolean | Propagated attestation; must be `true`. |
-| `payload` | object | One of the contracts below; `payload.contract` names it. |
 
 ---
 
 ## 1 · MissionConfig — Phase 0 (Orchestrator-AG)
 
-Defines campaign scope, constraints, and ethics guardrails.
+Defines scope, constraints, the model policy (≥ 2 families), reproducibility,
+and ethics guardrails.
 
 ```json
 {
@@ -72,29 +82,35 @@ Defines campaign scope, constraints, and ethics guardrails.
   "campaign_id": "q3-awareness-2026",
   "authorized": true,
   "objective": "security-awareness-training",
-  "scope": {
-    "region": "LATAM",
-    "sector": "finance",
-    "volume": 50,
-    "duration_days": 14
-  },
+  "scope": { "region": "LATAM", "sector": "finance", "volume": 50, "duration_days": 14 },
   "constraints": {
     "synthetic_data_only": true,
-    "channels": ["email", "sms", "voice"],
-    "max_interactions_per_target": 3
+    "channels": ["email", "sms"],
+    "max_messages_per_persona": 3
   },
-  "ethics": {
-    "consent_reference": "IRB-2026-014",
-    "isolated_environment": true
-  }
+  "model_policy": {
+    "models": [
+      { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
+      { "family": "openai", "name": "gpt-4.1", "adapter_version": "1.0" }
+    ]
+  },
+  "reproducibility": { "seed": 42, "deterministic": true },
+  "ethics": { "consent_reference": "IRB-2026-014", "isolated_environment": true }
 }
 ```
 
+| Field | Type | Notes |
+|-------|------|-------|
+| `constraints.channels` | enum[] | Subset of `email`, `sms` (unique). |
+| `model_policy.models` | ModelSpec[] | ≥ 2 entries spanning **≥ 2 distinct families**. |
+| `reproducibility.seed` | integer ≥ 0 | Fixes generation for reproducibility. |
+
 ---
 
-## 2 · SyntheticTargetSet — Phase 1 (Recon-AG → Harvest-AG)
+## 2 · SyntheticTargetSet — Phase 1 (Recon-AG → Profiler-AG)
 
-Programmatically generated targets and simulated attack surfaces. No external scanning.
+Programmatically generated targets and simulated attack surfaces. No external
+scanning.
 
 ```json
 {
@@ -105,12 +121,11 @@ Programmatically generated targets and simulated attack surfaces. No external sc
   "targets": [
     {
       "target_id": "tgt-0001",
-      "synthetic_domain": "examp1e-corp.com",
+      "synthetic_domain": "fantazylabz.tech",
       "domain_pattern": "typosquat",
       "attack_surfaces": [
-        { "type": "mail_server", "value": "mx.examp1e-corp.com" },
-        { "type": "login_form", "value": "https://examp1e-corp.com/login" },
-        { "type": "api", "value": "https://api.examp1e-corp.com/v1" }
+        { "type": "mail_server", "value": "mx.fantazylabz.tech" },
+        { "type": "login_form", "value": "https://fantazylabz.tech/login" }
       ]
     }
   ]
@@ -125,9 +140,9 @@ Programmatically generated targets and simulated attack surfaces. No external sc
 
 ---
 
-## 3 · ProfileDataset — Phase 2 (Harvest-AG → Design-AG, Payload-AG)
+## 3 · ProfileDataset — Phase 2 (Profiler-AG → Generator-AG)
 
-Labeled synthetic victim profiles. `recipient` matches the `Recipient` model.
+Labeled synthetic recipient profiles. `recipient` matches the `Recipient` model.
 
 ```json
 {
@@ -141,9 +156,9 @@ Labeled synthetic victim profiles. `recipient` matches the `Recipient` model.
       "profile_id": "prf-0001",
       "target_id": "tgt-0001",
       "recipient": {
-        "email": "employee@examp1e-corp.com",
-        "full_name": "Jordan Lee",
-        "role": "Accountant",
+        "email": "rebecca.stern@fantazylabz.tech",
+        "full_name": "Rebecca Stern",
+        "role": "Staff Accountant",
         "department": "Finance"
       },
       "attributes": {
@@ -160,9 +175,10 @@ Labeled synthetic victim profiles. `recipient` matches the `Recipient` model.
 
 ---
 
-## 4 · TemplateSet — Phase 3 (Design-AG → Orchestrator-AG)
+## 4 · TemplateSet — Phase 2 (Profiler-AG → Generator-AG)
 
-Communication templates with A/B variants. `pretext`, `tone`, `difficulty` use the shared enums.
+Seed **prompt templates** the generator conditions on. `pretext`, `tone`,
+`difficulty` use the shared enums; email templates require a `subject`.
 
 ```json
 {
@@ -172,13 +188,13 @@ Communication templates with A/B variants. `pretext`, `tone`, `difficulty` use t
     {
       "template_id": "tpl-0001",
       "channel": "email",
-      "pretext": "password_reset",
-      "tone": "urgent",
+      "pretext": "executive_request",
+      "tone": "authoritative",
       "difficulty": "medium",
       "language": "en",
-      "subject": "Action required: password expires today",
-      "body": "Hi {{full_name}}, your password expires today. {{reset_link}}",
-      "variables": ["full_name", "reset_link"],
+      "subject": "Quick approval needed before EOD",
+      "body": "Hi {{full_name}}, can you approve this today? {{link}}",
+      "variables": ["full_name", "link"],
       "ab_variant": "A"
     }
   ]
@@ -187,9 +203,10 @@ Communication templates with A/B variants. `pretext`, `tone`, `difficulty` use t
 
 ---
 
-## 5 · PayloadAssets — Phase 3 (Payload-AG → Orchestrator-AG)
+## 5 · PayloadAssets — Phase 2 (Profiler-AG → Generator-AG)
 
-Simulation assets (tracking links, sandboxed attachments, mirror pages). All assets are marked `simulated`.
+Simulation assets (tracking links, sandboxed attachments, mirror pages). All
+assets are marked `simulated`.
 
 ```json
 {
@@ -199,16 +216,9 @@ Simulation assets (tracking links, sandboxed attachments, mirror pages). All ass
     {
       "asset_id": "ast-0001",
       "type": "tracking_link",
-      "landing_url": "https://sim.example-corp.com/t/abc123",
+      "landing_url": "https://sim.fantazylabz.tech/t/abc123",
       "tracking_token": "abc123",
       "linked_template_id": "tpl-0001",
-      "simulated": true
-    },
-    {
-      "asset_id": "ast-0002",
-      "type": "attachment",
-      "filename": "invoice.pdf",
-      "content_ref": "sandbox://payloads/ast-0002",
       "simulated": true
     }
   ]
@@ -218,12 +228,108 @@ Simulation assets (tracking links, sandboxed attachments, mirror pages). All ass
 | Field | Type | Notes |
 |-------|------|-------|
 | `type` | enum | `tracking_link` \| `attachment` \| `mirror_page`. |
-| `content_ref` | URI | `sandbox://` reference; content never leaves the isolated store. |
+| `content_ref` | URI | `sandbox://` reference (attachments/mirror pages). |
 | `simulated` | const `true` | Assets are inert simulation artifacts. |
 
 ---
 
-## 6 · DeploymentManifest — Phase 4 (Orchestrator-AG → Responder-AG)
+## 6 · PhishingGenerationRequest — Phase 3 (Orchestrator-AG → Generator-AG)
+
+> **Canonical contract** — validated by
+> `app/core/schemas.py::PhishingGenerationRequest`. `authorized` must be `true`
+> or the request is rejected with `403`.
+
+```json
+{
+  "campaign_id": "q3-awareness-2026",
+  "authorized": true,
+  "channel": "email",
+  "recipient": {
+    "email": "rebecca.stern@fantazylabz.tech",
+    "full_name": "Rebecca Stern",
+    "role": "Staff Accountant",
+    "department": "Finance"
+  },
+  "sender": {
+    "display_name": "Elena Marchetti",
+    "from_address": "ceo@fantazylabz.tech",
+    "impersonated_brand": "Fantazy Labz"
+  },
+  "pretext": "executive_request",
+  "call_to_action": {
+    "type": "click_link",
+    "landing_url": "https://sim.fantazylabz.tech/t/abc123",
+    "button_label": "Review Document"
+  },
+  "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
+  "params": { "temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
+  "tone": "authoritative",
+  "difficulty": "medium",
+  "language": "en",
+  "subject_hint": "Quick approval needed before EOD",
+  "include_tracking_pixel": true
+}
+```
+
+| Field | Type | Constraint |
+|-------|------|------------|
+| `channel` | enum | `email` \| `sms` (default `email`). |
+| `model.family` | enum | `anthropic`, `openai`, `mistral`, `llama`, `local`. |
+| `params.seed` | integer ≥ 0 | **Required** — makes the generation reproducible. |
+| `pretext` | enum | `password_reset`, `invoice_payment`, `package_delivery`, `it_support`, `hr_notice`, `executive_request`, `shared_document`, `account_suspension`. |
+| `call_to_action.type` | enum | `click_link`, `enter_credentials`, `open_attachment`, `reply`. |
+| `subject_hint` / `include_tracking_pixel` | — | **Email only**; must be unset/`false` for SMS. |
+
+### 6b · PhishingGenerationResponse
+
+```json
+{
+  "generation_id": "9f8e7d6c-5b4a-3210-fedc-ba9876543210",
+  "campaign_id": "q3-awareness-2026",
+  "status": "queued",
+  "accepted_at": "2026-08-20T09:00:01Z",
+  "message": "Generation request accepted."
+}
+```
+
+---
+
+## 7 · GeneratedMessage — Phase 3 (Generator-AG → Validator-AG)
+
+One generated message with its provenance. Email requires a `subject`; SMS must
+not carry one (and is capped at 1600 characters).
+
+```json
+{
+  "contract": "GeneratedMessage",
+  "message_id": "msg-0001",
+  "channel": "email",
+  "scheduled_at": "2026-08-20T09:00:00Z",
+  "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech" },
+  "subject": "Quick approval needed before EOD",
+  "body": "Rebecca, please review and approve the attached before end of day.",
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/abc123" },
+  "references": [],
+  "provenance": {
+    "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
+    "params": { "temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
+    "prompt_template_id": "tpl-0001",
+    "prompt_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "generated_at": "2026-08-20T09:00:00Z",
+    "adapter_latency_ms": 812,
+    "runtime": { "sdk": "0.40.0" }
+  }
+}
+```
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `references` | MessageId[] | Ids of earlier messages this one cites (cross-channel). |
+| `provenance.prompt_hash` | sha256 hex | sha256 of the fully rendered prompt actually sent. |
+
+---
+
+## 8 · DeploymentManifest — Phase 3 (Orchestrator-AG → Generator-AG)
 
 Batches of per-recipient generation requests with a send schedule.
 
@@ -243,188 +349,90 @@ Batches of per-recipient generation requests with a send schedule.
 }
 ```
 
-### 6a · PhishingGenerationRequest
+---
 
-> **Canonical contract** — validated by `app/core/schemas.py::PhishingGenerationRequest`. `authorized` must be `true` or the request is rejected with `403`.
+## 9 · GeneratedCampaign — Phase 4 (Validator-AG)
 
-```json
-{
-  "campaign_id": "q3-awareness-2026",
-  "authorized": true,
-  "recipient": {
-    "email": "employee@example.com",
-    "full_name": "Jordan Lee",
-    "role": "Accountant",
-    "department": "Finance"
-  },
-  "sender": {
-    "display_name": "IT Service Desk",
-    "from_address": "it-support@example-corp.com",
-    "impersonated_brand": "Example Corp IT"
-  },
-  "pretext": "password_reset",
-  "call_to_action": {
-    "type": "click_link",
-    "landing_url": "https://sim.example-corp.com/t/abc123",
-    "button_label": "Reset Password"
-  },
-  "tone": "urgent",
-  "difficulty": "medium",
-  "language": "en",
-  "subject_hint": "Action required: password expires today",
-  "include_tracking_pixel": true
-}
-```
-
-| Field | Type | Constraint |
-|-------|------|------------|
-| `campaign_id` | string | 1–64 chars. |
-| `authorized` | boolean | Must be `true`. |
-| `pretext` | enum | `password_reset`, `invoice_payment`, `package_delivery`, `it_support`, `hr_notice`, `executive_request`, `shared_document`, `account_suspension`. |
-| `call_to_action.type` | enum | `click_link`, `enter_credentials`, `open_attachment`, `reply`. |
-| `tone` | enum | `urgent`, `friendly`, `authoritative`, `neutral` (default `neutral`). |
-| `difficulty` | enum | `easy`, `medium`, `hard` (default `medium`). |
-| `language` | string | BCP-47-ish, `^[a-z]{2}(-[A-Z]{2})?$` (default `en`). |
-
-### 6b · PhishingGenerationResponse
-
-> **Canonical contract** — `app/core/schemas.py::PhishingGenerationResponse`.
+A coherent multi-channel bundle for one impersonated persona. Enforces the three
+coherence rules.
 
 ```json
 {
-  "generation_id": "9f8e7d6c-5b4a-3210-fedc-ba9876543210",
+  "contract": "GeneratedCampaign",
   "campaign_id": "q3-awareness-2026",
-  "status": "queued",
-  "accepted_at": "2026-08-20T09:00:01Z",
-  "message": "Generation request accepted."
+  "persona": {
+    "display_name": "Elena Marchetti",
+    "email": "ceo@fantazylabz.tech",
+    "role": "CEO",
+    "organization": "Fantazy Labz"
+  },
+  "messages": [
+    { "message_id": "msg-0001", "channel": "email", "scheduled_at": "2026-08-20T09:00:00Z", "...": "..." },
+    { "message_id": "msg-0002", "channel": "sms", "scheduled_at": "2026-08-20T10:00:00Z", "references": ["msg-0001"], "...": "..." }
+  ]
 }
 ```
+
+**Coherence rules (all enforced in code):**
+
+- **Persona identity** — every message's `sender.display_name` and
+  `sender.from_address` must equal the campaign `persona` (the CEO is the same
+  everywhere).
+- **Cross-channel reference existence** — every id in `references` must exist in
+  the bundle; a message may not reference itself.
+- **Timing** — a message may not be scheduled before any message it references.
 
 ---
 
-## 7 · InteractionEvent — Phase 5 (channel gateway → Responder-AG)
+## 10 · CoherenceReport — Phase 4 (Validator-AG)
 
-A recipient action on any channel, including inbound/outbound voice calls.
-
-```json
-{
-  "contract": "InteractionEvent",
-  "campaign_id": "q3-awareness-2026",
-  "event_id": "evt-0001",
-  "generation_id": "9f8e7d6c-5b4a-3210-fedc-ba9876543210",
-  "profile_id": "prf-0001",
-  "channel": "voice",
-  "action": "enter_credentials",
-  "occurred_at": "2026-08-20T09:15:00Z",
-  "context": {
-    "call_direction": "inbound",
-    "transcript_ref": "sandbox://calls/evt-0001"
-  }
-}
-```
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `channel` | enum | `email` \| `sms` \| `voice`. |
-| `action` | enum | Mirrors `call_to_action.type`. |
-| `context.call_direction` | enum | `inbound` \| `outbound` (voice only). |
-
----
-
-## 8 · InteractionResult — Phase 5 (Responder-AG → Monitor-AG)
-
-The card selected by the responder decision tree plus the logged outcome.
+The recorded outcome of the coherence checks — the evidence that the generator
+satisfied its constraints.
 
 ```json
 {
-  "contract": "InteractionResult",
+  "contract": "CoherenceReport",
   "campaign_id": "q3-awareness-2026",
-  "event_id": "evt-0001",
-  "profile_id": "prf-0001",
-  "selected_card": "A",
-  "card_type": "credentials",
-  "channel": "voice",
-  "outcome": "submitted",
-  "captured_fields": ["username", "password"],
-  "response_ref": "sandbox://responses/evt-0001",
-  "logged_at": "2026-08-20T09:15:30Z"
-}
-```
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `selected_card` | enum | `A` \| `B` \| `C`. |
-| `card_type` | enum | `credentials` \| `fake_support` \| `verification_form`. |
-| `outcome` | enum | `submitted` \| `ignored` \| `reported` \| `bounced`. |
-| `captured_fields` | string[] | Field names only — never captured values. |
-
----
-
-## 9 · MetricsReport — Phase 6 (Monitor-AG → Orchestrator-AG)
-
-Aggregated KPIs and the success decision that drives the feedback loop.
-
-```json
-{
-  "contract": "MetricsReport",
-  "campaign_id": "q3-awareness-2026",
-  "window": { "from": "2026-08-20T09:00:00Z", "to": "2026-08-20T21:00:00Z" },
-  "kpis": {
-    "delivered": 50,
-    "opened": 34,
-    "clicked": 18,
-    "converted": 7,
-    "delivery_rate": 1.0,
-    "open_rate": 0.68,
-    "click_rate": 0.36,
-    "conversion_rate": 0.14,
-    "reported_as_spam": 2,
-    "bounce_rate": 0.0
-  },
-  "anomalies": [],
-  "exploit_successful": true
-}
-```
-
----
-
-## 10 · FeedbackDirective — Phase 7 (Monitor-AG / Orchestrator-AG → Design-AG, Harvest-AG)
-
-Closes the loop. On success, directs template optimization and profile enrichment; otherwise, adjusts parameters.
-
-```json
-{
-  "contract": "FeedbackDirective",
-  "campaign_id": "q3-awareness-2026",
-  "exploit_successful": true,
-  "directives": [
-    {
-      "target_agent": "Design-AG",
-      "action": "optimize_templates",
-      "template_ids": ["tpl-0001"],
-      "reason": "high_click_rate"
-    },
-    {
-      "target_agent": "Harvest-AG",
-      "action": "update_profiles",
-      "profile_ids": ["prf-0001"],
-      "observed": { "clicked": true, "converted": true }
-    }
+  "results": [
+    { "check": "persona_identity", "passed": true },
+    { "check": "timing", "passed": true },
+    { "check": "cross_channel_reference", "passed": true }
   ],
-  "parameter_adjustments": { "difficulty": "hard" }
+  "all_passed": true
 }
 ```
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `directives[].action` | enum | `optimize_templates` \| `update_profiles` \| `adjust_parameters`. |
-| `parameter_adjustments` | object | Applied when `exploit_successful` is `false` (or for the next iteration). |
+`results` must cover every check exactly once, and `all_passed` must equal the
+conjunction of the individual results.
+
+---
+
+## 11 · ProvenanceLog — Phase 4 (Validator-AG)
+
+Append-only reproducibility record: one `GenerationProvenance` entry per
+generated message.
+
+```json
+{
+  "contract": "ProvenanceLog",
+  "campaign_id": "q3-awareness-2026",
+  "entries": [
+    {
+      "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
+      "params": { "temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
+      "prompt_template_id": "tpl-0001",
+      "prompt_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "generated_at": "2026-08-20T09:00:00Z"
+    }
+  ]
+}
+```
 
 ---
 
 ## Validation & Persistence Rules
 
-These contracts are enforced in code by Pydantic v2 models in
+Enforced by Pydantic v2 models in
 [`app/core/schemas.py`](../app/core/schemas.py) and covered by
 `tests/test_flow_contracts.py`.
 
@@ -435,28 +443,23 @@ These contracts are enforced in code by Pydantic v2 models in
 - **Synthetic-only.** `MissionConstraints.synthetic_data_only` must be `true`;
   `SyntheticTargetSet` and `ProfileDataset` require `source == "synthetic"`.
 - **Isolated environment.** `MissionEthics.isolated_environment` must be `true`.
-- **Referential integrity.** IDs are prefix-typed (`tgt-`, `prf-`, `tpl-`,
-  `ast-`, `evt-`, `bat-`) and must be unique within a collection; `target_count`
-  and `record_count` must equal the length of their arrays.
-- **Assets are inert.** Every `PayloadAsset.simulated` must be `true`;
-  attachments/mirror pages require a `sandbox://` `content_ref`; tracking links
-  require both `landing_url` and `tracking_token`.
-- **KPI funnel is monotonic.** `converted ≤ clicked ≤ opened ≤ delivered`, all
-  rates in `[0, 1]`, and `reported_as_spam ≤ delivered`.
-- **Card/type coherence.** `selected_card` A/B/C must match `card_type`
-  credentials/fake_support/verification_form.
-- **Channel coherence.** `call_direction` is valid only for the `voice` channel;
-  email templates require a `subject`.
-- **Feedback coherence.** A directive's `action` must target the correct agent;
-  a failed exploit (`exploit_successful == false`) requires `parameter_adjustments`.
+- **Two model families.** `ModelPolicy` requires ≥ 2 entries spanning ≥ 2
+  distinct `family` values.
+- **Reproducibility.** `GenerationParams.seed` is required.
+- **Channel shaping.** `channels ⊆ {email, sms}`; email requires a `subject`,
+  SMS forbids one; `subject_hint`/`include_tracking_pixel` are email-only.
+- **Coherence.** `GeneratedCampaign` enforces persona identity, cross-channel
+  reference existence, and timing; `CoherenceReport` must be internally
+  consistent.
+- **Referential integrity.** Prefix-typed ids (`tgt-`, `prf-`, `tpl-`, `ast-`,
+  `msg-`, `bat-`) are unique within a collection; `target_count` / `record_count`
+  equal their array lengths.
+- **Assets are inert.** Every `PayloadAsset.simulated` must be `true`.
 
 ### Persistence rules
 
 Every contract carries a `PersistencePolicy` (`store`, `retention_days`, `pii`).
 All artifacts are **append-only (immutable)** and **encrypted at rest**.
-Critically, `InteractionResult.captured_fields` stores **field names only** —
-raw captured values are never persisted (a value like `victim@example.com` fails
-the field-name pattern).
 
 | Contract | Store | Retention (days) | PII class |
 |----------|-------|------------------|-----------|
@@ -467,10 +470,9 @@ the field-name pattern).
 | `TemplateSet` | `campaign-content` | 365 | none |
 | `PayloadAssets` | `sandbox-assets` | 90 | none |
 | `DeploymentManifest` | `campaign-schedules` | 365 | synthetic |
-| `InteractionEvent` | `interaction-log` | 365 | sensitive |
-| `InteractionResult` | `interaction-log` | 365 | sensitive |
-| `MetricsReport` | `metrics-warehouse` | 730 | none |
-| `FeedbackDirective` | `feedback-log` | 365 | none |
+| `GeneratedCampaign` | `generated-campaigns` | 365 | synthetic |
+| `CoherenceReport` | `coherence-reports` | 365 | none |
+| `ProvenanceLog` | `provenance-log` | 730 | none |
 
 ---
 
@@ -478,13 +480,14 @@ the field-name pattern).
 
 ```
 MissionConfig ─▶ SyntheticTargetSet ─▶ ProfileDataset ─┬▶ TemplateSet ──┐
-                                                        └▶ PayloadAssets ┘
-                                                                         ▼
-                                          DeploymentManifest (PhishingGenerationRequest/Response)
-                                                                         ▼
-                          InteractionEvent ─▶ InteractionResult ─▶ MetricsReport ─▶ FeedbackDirective
-                                                                                        │
-                          (loops back to Design-AG & Harvest-AG) ◀──────────────────────┘
+                (Profiler-AG)                          └▶ PayloadAssets ┘
+                                                                        ▼
+                              PhishingGenerationRequest ─▶ GeneratedMessage (per channel)
+                                        (Generator-AG, via ModelSpec adapter + provenance)
+                                                                        ▼
+                              GeneratedCampaign ─▶ CoherenceReport + ProvenanceLog
+                                        (Validator-AG — one-way verify, no feedback loop)
 ```
 
-See [architecture.md](./architecture.md) for the agent roles and phase descriptions, and [`diagrams_output/`](../diagrams_output/) for the rendered diagrams.
+See [architecture.md](./architecture.md) for the stage roles and phase
+descriptions.
