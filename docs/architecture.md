@@ -1,103 +1,122 @@
-# Distributed Workflow for a Phishing Pipeline (Controlled Investigation)
+# Configurable Phishing-Campaign Generator — Architecture
 
-> **Note**: This workflow is designed exclusively for **cybersecurity research** purposes, within isolated environments and under explicit authorization. It must not be used for malicious activities. All datasets are **synthetic and generated internally** — no external tools or OSINT sources are used to collect real data.
-
----
-
-## Agent Architecture
-
-| Agent | Role | Responsibility |
-|--------|-----|-----------------|
-| **Recon-AG** | Intelligence | Generation of synthetic target/domain data (no external collection) |
-| **Harvest-AG** | Collection | Structuring of synthetic victim profiles into labeled datasets |
-| **Design-AG** | Creative | Generation of communication templates (email, SMS, voice) |
-| **Payload-AG** | Technical | Creation of malicious content (links, files) |
-| **Responder-AG** | Interaction | Handles live victim interactions and automated responses across channels — email, SMS, and inbound/outbound voice calls; serves response cards (credentials, fake support, verification form) |
-| **Orchestrator-AG** | Coordination | Launches campaigns, manages state, synchronizes agents |
-| **Monitor-AG** | Analytics | Collects KPIs, generates reports, detects success patterns |
+> **Note.** This system is a **generator of synthetic phishing-simulation
+> content** for **authorized security-awareness research** in isolated
+> environments. It must not be used for malicious activity. All data is
+> **synthetic and generated internally** — no external tools or OSINT sources
+> collect real data.
 
 ---
 
-## Distributed Pipeline (Phases + Agents)
+## What this project is (and is not)
 
-### Phase 0: Planning (Orchestrator-AG)
-- Defines the objectives of the investigation.
-- Assigns parameters: region, sector, volume, duration.
-- Establishes ethics rules and interaction limits.
+This is a **configurable, reproducible campaign generator**, not an
+attack-simulation platform. Its scientific contribution is showing that the
+generator **reliably and reproducibly satisfies campaign constraints** across
+model families — not measuring whether a message deceives a victim.
 
----
+Two scope decisions follow from that framing:
 
-### Phase 1: Synthetic Reconnaissance (Recon-AG)
-- Programmatic generation of synthetic domains (similar/typo patterns).
-- Definition of simulated attack surfaces (mail servers, forms, APIs) as synthetic metadata.
-- No external scanning or live data collection is performed.
-- **Output**: Synthetic list of potential targets + attack surfaces.
-
----
-
-### Phase 2: Dataset Construction (Harvest-AG)
-- Generation of synthetic victim profiles (no OSINT or external sources).
-- Classification by: role, seniority, devices used, language patterns.
-- **Output**: Labeled synthetic dataset (JSON/CSV) with profiles.
+- **Channels: email + SMS only.** Voice is out of scope.
+- **No success-optimization loop.** There is no victim-interaction tracking,
+  no KPI dashboard, and no "if the exploit succeeded, optimize the templates"
+  feedback. The generator's success criterion is *constraint satisfaction*,
+  verified by the coherence validators and recorded in the provenance log.
 
 ---
 
-### Phase 3: Content Generation (Design-AG + Payload-AG)
-- **Design-AG**: Creates email/SMS/call templates with A/B testing.
-- **Payload-AG**: Generates:
-  - Shortened links with tracking.
-  - Files (PDFs, Excel) with macros or redirects.
-  - Mirror pages (cloning of legitimate sites).
-- **Output**: Set of campaigns ready to deploy.
+## Stage Architecture
+
+The pipeline is decomposed into five single-responsibility stages coordinated
+by an orchestrator. (These replace the earlier seven-agent attack pipeline.)
+
+| Stage | Role | Responsibility |
+|-------|------|----------------|
+| **Orchestrator-AG** | Coordination | Reads the `MissionConfig`, enforces constraints, fixes the reproducibility seed and model policy, drives the run. |
+| **Recon-AG** | Intelligence | Generates synthetic targets/domains (typo/homoglyph patterns) and simulated attack surfaces — no external collection. |
+| **Profiler-AG** | Synthetic data | Structures labeled synthetic recipient profiles from the targets (no external collection). |
+| **Generator-AG** | LLM generation | Generates email and SMS content through **model-family adapters** (≥ 2 families), recording provenance for every artifact. |
+| **Validator-AG** | Coherence & provenance | Runs the coherence validators and finalizes the append-only provenance log. |
+
+### Core building blocks (the part that was missing)
+
+1. **Model-family adapters.** `ModelSpec` (family + model + adapter version)
+   and `GenerationParams` (with a required `seed`) let the generator target at
+   least two distinct model families. `ModelPolicy` enforces the "≥ 2 families"
+   rule at the campaign level so results are comparable across families.
+2. **Coherence validators.** Enforced in `GeneratedCampaign`:
+   - **Persona identity** — the impersonated identity (e.g. the CEO) is the
+     same across every message in the campaign.
+   - **Timing** — a follow-up may not be scheduled before the message it cites.
+   - **Cross-channel reference existence** — every referenced message id
+     actually exists in the bundle (the SMS "as per my email" requires the
+     email to exist).
+3. **Provenance log.** `GenerationProvenance` / `ProvenanceLog` capture the
+   model, decoding parameters, seed, prompt template id, and prompt hash for
+   each artifact, so every generation is reproducible.
 
 ---
 
-### Phase 4: Controlled Launch (Orchestrator-AG)
-- Segments the dataset into batches.
-- Schedules sends with randomized timing (realistic simulation).
-- Assigns channels: primary email, secondary SMS, call as reinforcement.
+## Pipeline (Phases + Stages)
+
+### Phase 0 — Planning (Orchestrator-AG)
+- Reads `MissionConfig`: objective, scope, constraints (`channels ⊆ {email, sms}`),
+  `model_policy` (≥ 2 families), `reproducibility` (seed), and ethics guardrails.
+- Rejects any config that is not authorized, not synthetic-only, or not isolated.
+
+### Phase 1 — Synthetic Reconnaissance (Recon-AG)
+- Programmatic generation of synthetic domains (typo/homoglyph patterns) and
+  simulated attack surfaces as metadata — **no external scanning**.
+- **Output**: `SyntheticTargetSet`.
+
+### Phase 2 — Profiling & Content Inputs (Profiler-AG → Generator-AG)
+- Labeled synthetic recipient profiles (role, seniority, devices, language) built
+  from the recon targets — **no external collection**. Output: `ProfileDataset`.
+- Seed **prompt templates** (`TemplateSet`) the generator conditions on, per
+  channel and pretext, with A/B variants.
+- Simulation assets (`PayloadAssets`): tracking links and sandboxed
+  attachments/mirror pages, all marked `simulated`.
+
+### Phase 3 — Generation (Generator-AG)
+- For each recipient/persona, the generator produces one or more
+  `GeneratedMessage`s across email and SMS via the selected `ModelSpec` adapter.
+- Each message carries its `GenerationProvenance`.
+- **Output**: `GeneratedMessage`s, batched by `DeploymentManifest`.
+
+### Phase 4 — Coherence & Provenance (Validator-AG)
+- Assembles the `GeneratedCampaign` (persona + messages) and runs the three
+  coherence validators; emits a `CoherenceReport`.
+- Finalizes the append-only `ProvenanceLog` for reproducibility.
+- **Output**: `CoherenceReport`, `ProvenanceLog`.
 
 ---
 
-### Phase 5: Interaction Handling (Responder-AG)
-- Handles live responses to victim interactions across channels: email, SMS, and voice calls.
-- Selects the appropriate response card: credentials, fake support, or verification form.
-- Sustains realistic conversation flow for inbound and outbound calls.
-- **Output**: Interaction transcripts + logged results forwarded to Monitor-AG.
-
----
-
-### Phase 6: Monitoring and KPIs (Monitor-AG)
-- Computes real-time metrics:
-  - Delivery, open, click, and conversion rates (data submission).
-  - Response time, bounce rate, reported-as-spam rate.
-- Generates dashboards and anomaly alerts.
-- **Decision**: If **exploit successful** → feeds back to Design-AG to optimize templates (design pattern learning).
-
----
-
-### Phase 7: Feedback (Orchestrator-AG + Monitor-AG)
-- Updates the dataset with observed behaviors.
-- Retrains response cards (tree improvement).
-- Adjusts domains and designs according to success patterns.
-
----
-
-## Agent Communication Diagram
+## Stage Communication Diagram
 
 ```mermaid
 flowchart TD
-    A[Orchestrator-AG] --> B[Recon-AG]
-    B --> C[Harvest-AG]
-    C --> D[Design-AG]
-    C --> E[Payload-AG]
-    D --> F[Orchestrator-AG]
-    E --> F
-    F --> G[Responder-AG]
-    G --> H[Monitor-AG]
-    H --> I{Exploit successful?}
-    I -->|Yes| J[Feedback to Design-AG and Harvest-AG]
-    I -->|No| K[Parameter adjustment]
-    J --> F
-    K --> F
+    A[Orchestrator-AG<br/>MissionConfig] --> R[Recon-AG]
+    R -->|SyntheticTargetSet| B[Profiler-AG]
+    B -->|ProfileDataset| C[Generator-AG]
+    B -->|TemplateSet + PayloadAssets| C
+    A -->|ModelPolicy + seed| C
+    C -->|GeneratedMessage + Provenance| D[Validator-AG]
+    D -->|CoherenceReport| E[(coherence-reports)]
+    D -->|ProvenanceLog| F[(provenance-log)]
+    D -->|GeneratedCampaign| G[(generated-campaigns)]
 ```
+
+There is intentionally **no edge back into generation** — the pipeline is a
+one-way generate-then-verify flow, not an optimization loop.
+
+---
+
+## Design notes
+
+- **Authorization & isolation** are mandatory and validated in code
+  (`MissionConfig`, `DeploymentManifest`, `MessageEnvelope`).
+- **Synthetic-only** is enforced (`SyntheticTargetSet`/`ProfileDataset` require
+  `source == "synthetic"`; `MissionConstraints.synthetic_data_only` must be true).
+- All contracts are defined and validated by Pydantic v2 models in
+  [`app/core/schemas.py`](../app/core/schemas.py); the per-hand-off JSON shapes
+  are documented in [`flow-schema.md`](./flow-schema.md).
