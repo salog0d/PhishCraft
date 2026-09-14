@@ -82,7 +82,7 @@ and ethics guardrails.
   "campaign_id": "q3-awareness-2026",
   "authorized": true,
   "objective": "security-awareness-training",
-  "scope": { "region": "LATAM", "sector": "finance", "volume": 50, "duration_days": 14 },
+  "scope": { "region": "LATAM", "sector": "finance"},
   "constraints": {
     "synthetic_data_only": true,
     "channels": ["email", "sms"],
@@ -94,8 +94,7 @@ and ethics guardrails.
       { "family": "openai", "name": "gpt-4.1", "adapter_version": "1.0" }
     ]
   },
-  "reproducibility": { "seed": 42, "deterministic": true },
-  "ethics": { "consent_reference": "IRB-2026-014", "isolated_environment": true }
+  "ethics": {  "isolated_environment": true }
 }
 ```
 
@@ -103,7 +102,6 @@ and ethics guardrails.
 |-------|------|-------|
 | `constraints.channels` | enum[] | Subset of `email`, `sms` (unique). |
 | `model_policy.models` | ModelSpec[] | ≥ 2 entries spanning **≥ 2 distinct families**. |
-| `reproducibility.seed` | integer ≥ 0 | Fixes generation for reproducibility. |
 
 ---
 
