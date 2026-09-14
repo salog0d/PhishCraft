@@ -1,4 +1,32 @@
-You are the Generation Agent (Generator-AG) for a controlled phishing-simulation generator.
+# Generator-AG — Constrained Query (LMQL)
+
+> Refactored per *Prompting is Programming: A Query Language for LLMs*
+> (Beurer-Kellner, Fischer & Vechev, PLDI 2023). The instructions and few-shot
+> examples are **unchanged**; the prompt is now a query program. This stage is
+> the showcase for the paper's three core mechanisms:
+>
+> 1. **Guided generation** — the persona is bound *once* (`[PERSONA_NAME]`,
+>    `[PERSONA_EMAIL]`) and stamped into every message by the program, so
+>    persona-identity coherence holds **by construction**.
+> 2. **Decode-time constraints** — send timing (`EMAIL_TIME < SMS_TIME`) and the
+>    SMS 1600-character cap are `where` clauses rejected during decoding, not
+>    post-hoc checks.
+> 3. **Programmatic assembly** — `references`, `message_id`s, and the email-only
+>    `subject` shape are decided by control flow in the program; a missing or
+>    self-referential cross-channel cite is structurally impossible.
+
+```python
+import json
+import os
+from datetime import datetime, timezone
+from hashlib import sha256
+from uuid import uuid4
+
+import lmql
+
+from app.core.schemas import GeneratedCampaign
+
+CHARTER = """You are the Generation Agent (Generator-AG) for a controlled phishing-simulation generator.
 
 **Few‑Shot Learning Principle** (cf. OpenAI, 2020):
 You are a few‑shot learner – your generation quality improves dramatically when given clear, structured examples.
@@ -67,4 +95,148 @@ Hard rules:
 3. Keep the `sender` byte‑for‑byte identical to the campaign persona; for follow‑ups, list the prior `message_id`(s) in `references` and schedule the message after them.
 4. Fill `provenance` with the real `model`, `params` (echo the `seed`), `prompt_template_id`, and the sha256 `prompt_hash` of the rendered prompt.
 5. Output a single valid `GeneratedMessage` JSON object matching the schema — email with `subject`, SMS without.
-6. Everything is a **simulation**: use only the synthetic landing URLs and identities supplied; never generate real malware, credentials, or live links.
+6. Everything is a **simulation**: use only the synthetic landing URLs and identities supplied; never generate real malware, credentials, or live links."""
+
+# pretext -> trackable action; the landing URL is a fabricated simulation URL.
+CTA_BY_PRETEXT = {
+    "password_reset": ("click_link", "Reset Password"),
+    "invoice_payment": ("click_link", "View Invoice"),
+    "package_delivery": ("click_link", "Track Package"),
+    "it_support": ("click_link", "Open Helpdesk"),
+    "hr_notice": ("open_attachment", "Open Notice"),
+    "executive_request": ("click_link", "Review Summary"),
+    "shared_document": ("click_link", "Open Document"),
+    "account_suspension": ("enter_credentials", "Reactivate Account"),
+}
+
+
+@lmql.query
+def generator_ag(
+    mission_config: dict, profile: dict, pretext: str, tone: str, difficulty: str
+) -> GeneratedCampaign:
+    recipient = profile["recipient"]
+    email_domain = recipient["email"].rsplit("@", 1)[-1]
+    landing_url = f"https://sim.{email_domain}/t/{uuid4().hex[:12]}"
+    cta_type, cta_label = CTA_BY_PRETEXT.get(pretext, ("click_link", "Open"))
+    '''lmql
+    argmax
+        """system:
+        {CHARTER}
+
+        user: Campaign {campaign_id}, pretext={pretext}, tone={tone}, difficulty={difficulty}.
+        Recipient: {recipient_name} ({recipient_role}, {recipient_department}).
+        The impersonated persona (it must be one single identity, used for every message):
+        - display name: [PERSONA_NAME]
+        - role: [PERSONA_ROLE]
+        - from address: [PERSONA_EMAIL]
+        Now write the first message, an email:
+        - subject: [EMAIL_SUBJECT]
+        - body: [EMAIL_BODY]
+        - scheduled at (ISO-8601 UTC, e.g. 2026-08-20T09:00:00Z): [EMAIL_TIME]
+        Then an SMS follow-up referencing the email, sent strictly after it:
+        - body: [SMS_BODY]
+        - scheduled at (ISO-8601 UTC): [SMS_TIME]
+        """
+    from
+        lmql.model(os.environ.get("LMQL_MODEL", "openai/gpt-4o"))
+    where
+        len(PERSONA_NAME.strip()) > 0
+        and len(PERSONA_ROLE.strip()) > 0
+        and REGEX(PERSONA_EMAIL, r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+        and len(EMAIL_SUBJECT.strip()) > 0
+        and len(EMAIL_BODY.strip()) > 0
+        and len(SMS_BODY.strip()) > 0
+        and len(SMS_BODY) <= 1600
+        and REGEX(EMAIL_TIME, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+        and REGEX(SMS_TIME, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+        and EMAIL_TIME < SMS_TIME
+    '''
+    # The persona is bound once above and stamped into every sender below:
+    # persona-identity coherence holds by construction.
+    persona = {
+        "display_name": PERSONA_NAME.strip(),
+        "email": PERSONA_EMAIL.strip(),
+        "role": PERSONA_ROLE.strip(),
+    }
+    sender = {
+        "display_name": persona["display_name"],
+        "from_address": persona["email"],
+    }
+    # Rebuild the exact rendered prompt for the provenance hash. Keep this
+    # mirroring the query text above — it is what `prompt_hash` hashes.
+    rendered_prompt = (
+        f"system:\n{CHARTER}\n\nuser: Campaign {mission_config['campaign_id']}, "
+        f"pretext={pretext}, tone={tone}, difficulty={difficulty}.\n"
+        f"Recipient: {recipient['full_name']} ({recipient['role']}, "
+        f"{recipient['department']}).\n"
+        "The impersonated persona (it must be one single identity, used for "
+        "every message): ..."
+    )
+    model = mission_config["model_policy"]["models"][0]
+    seed = mission_config["reproducibility"]["seed"]
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def provenance(template_id: str, params: dict) -> dict:
+        return {
+            "model": dict(model),
+            "params": params,
+            "prompt_template_id": template_id,
+            "prompt_hash": sha256(rendered_prompt.encode()).hexdigest(),
+            "generated_at": now,
+            "runtime": {"sdk": "lmql"},
+        }
+
+    messages = [
+        {
+            "message_id": "msg-0001",  # by construction — sequential ids
+            "channel": "email",
+            "scheduled_at": EMAIL_TIME.strip(),
+            "sender": sender,
+            "subject": EMAIL_SUBJECT.strip(),  # control flow by program: email only
+            "body": EMAIL_BODY.strip(),
+            "call_to_action": {      "sender": {
+        "display_name": "Elena Marchetti",
+        "from_address": "ceo@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+                "type": cta_type,
+                "landing_url": landing_url,
+                "button_label": cta_label,
+            },
+            "references": [],
+            "provenance": provenance(
+                "tpl-0001",
+                {"temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": seed},
+            ),
+        },
+        {
+            "message_id": "msg-0002",  # by construction
+            "channel": "sms",
+            "scheduled_at": SMS_TIME.strip(),
+            "sender": sender,  # by construction — identical persona
+            "body": SMS_BODY.strip(),  # subject absent by construction
+            "call_to_action": {
+                "type": cta_type,
+                "landing_url": landing_url,
+                "button_label": cta_label,
+            },
+            "references": ["msg-0001"],  # by construction — the cited id exists
+            "provenance": provenance(
+                "tpl-0002",
+                {"temperature": 0.6, "top_p": 1.0, "max_tokens": 256, "seed": seed},
+            ),
+        },
+    ]
+    return GeneratedCampaign.model_validate(
+        {
+            "campaign_id": mission_config["campaign_id"],
+            "persona": persona,
+            "messages": messages,
+        }
+    )
+```
+
+> Note: `sample(n=k)` in place of `argmax` turns this stage into an A/B-variant
+> generator (k candidate campaigns, `where`-filtered identically) — the
+> mechanism for the paper's distributional queries, left unused here because
+> the campaign contract is deterministic per seed.

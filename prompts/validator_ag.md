@@ -1,4 +1,22 @@
-You are the Verification Agent (Validator-AG) for a controlled phishing-simulation generator.
+# Validator-AG — Constrained Query (LMQL)
+
+> Refactored per *Prompting is Programming: A Query Language for LLMs*
+> (Beurer-Kellner, Fischer & Vechev, PLDI 2023). The instructions and few-shot
+> examples are **unchanged**; the prompt is now a query program. Each verdict
+> is a variable constrained by `Distribution` to `passed`/`failed` — the model
+> cannot emit a third state — and `all_passed` is **computed by the program**
+> as the AND of the three verdicts, so the charter's rule "never disagree with
+> the individual checks" holds *by construction*: a contradictory report is
+> structurally impossible.
+
+```python
+import os
+
+import lmql
+
+from app.core.schemas import CoherenceReport
+
+CHARTER = """You are the Verification Agent (Validator-AG) for a controlled phishing-simulation generator.
 
 **Few‑Shot Learning Principle** (cf. OpenAI, 2020):
 You are a few‑shot learner – your judgment quality improves dramatically when given clear, structured examples.
@@ -49,4 +67,52 @@ The three checks (each must appear exactly once):
 3. Set `all_passed` to the AND of the three results — never disagree with the individual checks.
 4. Include **exactly one** result per check, using the enum values `persona_identity`, `timing`, `cross_channel_reference`.
 5. Output a single valid `CoherenceReport` JSON object matching the schema.
-6. Report faithfully: if a check fails, say so plainly — do not soften or omit a violation to make a campaign look coherent.
+6. Report faithfully: if a check fails, say so plainly — do not soften or omit a violation to make a campaign look coherent."""
+
+VERDICTS = ["passed", "failed"]
+
+
+@lmql.query
+def validator_ag(generated_campaign: dict) -> CoherenceReport:
+    campaign_json = json.dumps(generated_campaign, indent=2)
+    '''lmql
+    argmax
+        """system:
+        {CHARTER}
+
+        user: The GeneratedCampaign to verify:
+        {campaign_json}
+        Decide each check (passed or failed) and write a short, specific detail naming the offending message_id(s) when a check fails:
+        - persona_identity verdict: [V1] Distribution(V1, VERDICTS)
+        - persona_identity detail: [D1]
+        - timing verdict: [V2] Distribution(V2, VERDICTS)
+        - timing detail: [D2]
+        - cross_channel_reference verdict: [V3] Distribution(V3, VERDICTS)
+        - cross_channel_reference detail: [D3]
+        """
+    from
+        lmql.model(os.environ.get("LMQL_MODEL", "openai/gpt-4o"))
+    where
+        len(D1.strip()) > 0
+        and len(D2.strip()) > 0
+        and len(D3.strip()) > 0
+    '''
+    results = [
+        {"check": "persona_identity", "passed": V1 == "passed", "detail": D1.strip()},
+        {"check": "timing", "passed": V2 == "passed", "detail": D2.strip()},
+        {
+            "check": "cross_channel_reference",
+            "passed": V3 == "passed",
+            "detail": D3.strip(),
+        },
+    ]
+    return CoherenceReport.model_validate(
+        {
+            "campaign_id": generated_campaign["campaign_id"],
+            "results": results,
+            # Computed, not generated — disagreement with the verdicts is
+            # structurally impossible (charter rule 3 becomes an invariant).
+            "all_passed": all(r["passed"] for r in results),
+        }
+    )
+```
