@@ -140,6 +140,7 @@ class ModelFamily(str, Enum):
     MISTRAL = "mistral"
     LLAMA = "llama"
     LOCAL = "local"
+    DEEPSEEK = "deepseek"
 
 
 class ModelSpec(BaseModel, frozen=True):
