@@ -20,14 +20,10 @@ def shell(tmp_path, monkeypatch):
 
 
 def _run(shell, line: str) -> str:
-    # onecmd() bypasses precmd(), so replicate its slash-stripping here, and
-    # redirect sys.stdout (the shell's print() target) into a buffer.
-    import contextlib
-
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        shell.onecmd(line.lstrip("/"))
-    return buf.getvalue()
+    # onecmd() bypasses precmd-style handling, so strip the slash here. The
+    # shell renders through its rich Console, wired to the fixture's buffer.
+    shell.onecmd(line.lstrip("/"))
+    return shell.console.file.getvalue()
 
 
 # --------------------------------------------------------------------------- #
