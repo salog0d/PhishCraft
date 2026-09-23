@@ -27,3 +27,10 @@
 | S8 | 1 | 42 | ok | link_consistency |
 | S9 | 1 | 5 | ok | link_consistency |
 | S10 | 1 | 42 | ok | link_consistency |
+## Reproducibility (seed 42, same spec twice)
+
+From `data/measurements/reproduce-adk/reproducibility.json`:
+
+| spec | runs | identical | deterministic layer |
+|---|---|---|---|
+| S1 (seed 42, deepseek-chat) | 2 | **true — byte-identical** | true |
