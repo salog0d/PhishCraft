@@ -1,5 +1,14 @@
 # Generator Reliability & Scope-Reduction — Implementation Plan
 
+> **Status update (implemented).** This plan was executed on `main` and its
+> measurement results are in `data/measurements/`. A follow-up on
+> `feat/interactive-harness` then **fixed** the `link_consistency` failure
+> (charter no longer hardcodes the `abc123` example token; the deterministic
+> assembler normalizes body links; the driver retries placeholder echoes) and
+> re-measured: violations dropped from 10/10 to 0/10. See
+> [`data/measurements/README.md`](../data/measurements/README.md) for the
+> before/after tables.
+
 > **Audience:** an LLM/engineer executing this work with full access to the repo.
 > **Follow the steps in order.** Each step names the files to touch and the
 > acceptance test that proves it is done.

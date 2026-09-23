@@ -6,7 +6,8 @@
 Writes ``<out>/reproducibility.json`` and one artifact pair per run under
 ``<out>/runs/<spec_id>/``. The deterministic layer (ids, persona, URLs,
 references, schedule, provenance) must match across runs; the content layer
-(LLM-written subject/body) is the measured result.
+(LLM-written subject/body) is the measured result. The interactive shell calls
+``run()`` directly.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Union
 
 from measurement.adapters import get_adapter
 from measurement.runner import canonical_hash, deterministic_layer_hash
@@ -28,23 +30,22 @@ def _default_mission() -> dict:
     )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--spec-id", help="run one spec (default: all)")
-    parser.add_argument("--runs", type=int, default=2)
-    parser.add_argument("--adapter", default="stub")
-    parser.add_argument("--out", default=None)
-    args = parser.parse_args()
-
-    adapter = get_adapter(args.adapter)
+def run(
+    spec_id: Union[str, None] = None,
+    runs: int = 2,
+    adapter_name: str = "stub",
+    out: Union[str, Path, None] = None,
+) -> dict:
+    """Run the reproducibility experiment; persist artifacts; return results."""
+    adapter = get_adapter(adapter_name)
     mission = _default_mission()
-    out = Path(args.out or f"data/measurements/reproduce-{args.adapter}")
-    specs = [s for s in baseline_specs() if not args.spec_id or s.spec_id == args.spec_id]
+    out = Path(out or f"data/measurements/reproduce-{adapter.name}")
+    specs = [s for s in baseline_specs() if not spec_id or s.spec_id == spec_id]
 
     results: dict = {"adapter": adapter.name, "specs": {}}
     for spec in specs:
         rows = []
-        for i in range(1, args.runs + 1):
+        for i in range(1, runs + 1):
             run_dir = out / "runs" / spec.spec_id
             run_dir.mkdir(parents=True, exist_ok=True)
             try:
@@ -93,6 +94,19 @@ def main() -> None:
         json.dumps(results, indent=2), encoding="utf-8"
     )
     print(f"saved: {out / 'reproducibility.json'}")
+    results["out_dir"] = str(out)
+    return results
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--spec-id", help="run one spec (default: all)")
+    parser.add_argument("--runs", type=int, default=2)
+    parser.add_argument("--adapter", default="stub")
+    parser.add_argument("--out", default=None)
+    args = parser.parse_args()
+    run(spec_id=args.spec_id, runs=args.runs, adapter_name=args.adapter,
+        out=args.out)
 
 
 if __name__ == "__main__":

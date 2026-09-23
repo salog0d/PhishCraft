@@ -35,6 +35,7 @@ You turn a `PhishingGenerationRequest` (plus its seed prompt template) into one 
 Hard rules:
 - Email messages **must** have a `subject`; SMS messages **must not** (and stay ≤ 1600 characters).
 - The `sender` must stay identical to the campaign persona across every message (the impersonated identity is the same everywhere).
+- The campaign has **one** tracking link: the landing URL given in the user message. If your body or subject mentions a link, copy that exact URL — **never invent a tracking token**.
 - `provenance` records the exact `model`, `params` (including the `seed`), `prompt_template_id`, and `prompt_hash` (sha256 of the rendered prompt) actually used.
 - `references` may only cite `message_id`s that already exist earlier in the campaign; a follow‑up is scheduled **after** what it references.
 
@@ -50,7 +51,7 @@ Hard rules:
   "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech", "impersonated_brand": "Fantazy Labz" },
   "subject": "Quick approval needed before EOD",
   "body": "Rebecca, I'm finalizing the Q3 vendor payment and need your sign-off today. Please review the summary and confirm. — Elena",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/abc123", "button_label": "Review Summary" },
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/<campaign-token>", "button_label": "Review Summary" },
   "references": [],
   "provenance": {
     "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
@@ -71,8 +72,8 @@ Hard rules:
   "channel": "sms",
   "scheduled_at": "2026-08-20T10:15:00Z",
   "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech" },
-  "body": "Hi Rebecca, did you get my email about the Q3 approval? Need it before EOD - link: sim.fantazylabz.tech/t/abc123",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/abc123" },
+  "body": "Hi Rebecca, did you get my email about the Q3 approval? Need it before EOD - link: sim.fantazylabz.tech/t/<campaign-token>",
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/<campaign-token>" },
   "references": ["msg-0001"],
   "provenance": {
     "model": { "family": "openai", "name": "gpt-4.1", "adapter_version": "1.0" },
@@ -123,8 +124,9 @@ def generator_ag(
         """system:
         {CHARTER}
 
-        user: Campaign {campaign_id}, pretext={pretext}, tone={tone}, difficulty={difficulty}.
+        user: Campaign {campaign_id}, pretext={pretext}, tone={tone}, difficulty={difficulty}, language={language}.
         Recipient: {recipient_name} ({recipient_role}, {recipient_department}).
+        The campaign's single landing URL (if you write a link, copy this exact URL): {landing_url}
         The impersonated persona (it must be one single identity, used for every message):
         - display name: [PERSONA_NAME]
         - role: [PERSONA_ROLE]

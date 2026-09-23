@@ -6,7 +6,7 @@
 Aggregates over every spec x run: how many campaigns violate at least one
 coherence constraint, broken down by check. Writes ``<out>/reliability.json``
 and a human-readable ``<out>/summary.md`` — the failure rate is the paper's
-first result.
+first result. The interactive shell calls ``run()`` directly.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Union
 
 from measurement.adapters import get_adapter
 from measurement.runner import run_spec
@@ -37,18 +38,17 @@ def _default_mission() -> dict:
     )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--runs", type=int, default=1)
-    parser.add_argument("--adapter", default="stub")
-    parser.add_argument("--out", default=None)
-    args = parser.parse_args()
-
-    adapter = get_adapter(args.adapter)
+def run(
+    adapter_name: str = "stub",
+    runs: int = 1,
+    out: Union[str, Path, None] = None,
+) -> dict:
+    """Run the reliability suite, persist the artifacts, return the payload."""
+    adapter = get_adapter(adapter_name)
     mission = _default_mission()
     specs = baseline_specs()
     out = Path(
-        args.out
+        out
         or f"data/measurements/reliability-{adapter.name}-"
         f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     )
@@ -56,7 +56,7 @@ def main() -> None:
 
     records = []
     for spec in specs:
-        for i in range(1, args.runs + 1):
+        for i in range(1, runs + 1):
             record = run_spec(spec, adapter, i, mission)
             records.append(record)
             print(
@@ -95,8 +95,11 @@ def main() -> None:
             }
             for r in records
         ],
+        "out_dir": str(out),
     }
-    (out / "reliability.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    (out / "reliability.json").write_text(
+        json.dumps(payload, indent=2), encoding="utf-8"
+    )
 
     lines = [
         "# Reliability experiment — summary",
@@ -130,6 +133,16 @@ def main() -> None:
 
     print(f"saved: {out / 'reliability.json'}")
     print(f"saved: {out / 'summary.md'}")
+    return payload
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--runs", type=int, default=1)
+    parser.add_argument("--adapter", default="stub")
+    parser.add_argument("--out", default=None)
+    args = parser.parse_args()
+    run(adapter_name=args.adapter, runs=args.runs, out=args.out)
 
 
 if __name__ == "__main__":

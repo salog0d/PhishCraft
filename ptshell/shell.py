@@ -1,0 +1,614 @@
+"""Interactive harness shell — a styled, visual REPL over the generator.
+
+    python -m ptshell
+
+A Claude-Code-style terminal UI: a colored prompt (model + adapter inline),
+tab-completion with descriptions, persistent command history, and rich
+rendering of every command — panels, tables, spinners, and pass/fail badges.
+
+All commands work with or without the leading slash (``/generate`` or
+``generate``). Settings persist to ``~/.pt-shell/config.json`` (override with
+the ``PTSHELL_CONFIG`` env var) and can be changed in-session; model switches
+take effect on the next generation.
+
+Capabilities live as ``cmd_*`` methods on :class:`PtShell`; adding a new
+capability = add a method + a ``COMMANDS`` row.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shlex
+import sys
+from pathlib import Path
+
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+from ptshell import config as cfg_mod
+from ptshell.config import KNOWN_MODELS
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+COMMANDS: dict[str, str] = {
+    "help": "show this command list (/help [command])",
+    "config": "view or set settings (/config, /config <key> [value], /config reset)",
+    "model": "set the generation model (/model <id>)",
+    "models": "list known model ids",
+    "recipients": "list the persona catalog (12 internal + 2 external)",
+    "recipient": "set the default recipient (/recipient <id>)",
+    "generate": "run the ADK pipeline once; save campaign + report",
+    "validate": "run the 4 coherence checks on a campaign file",
+    "measure": "run the 10-spec reliability suite (writes summary.md)",
+    "reproduce": "run the same spec twice and compare (default: S1)",
+    "send": "deliver the last generated campaign to MailHog",
+    "status": "show current settings and the last run summary",
+    "quit": "exit the shell (also /exit or Ctrl-D)",
+}
+
+_PROMPT_STYLE = {
+    "prompt": "ansicyan bold",
+    "prompt.dim": "ansibrightblack",
+    "bottom-toolbar": "bg:#303030 ansibrightblack",
+    "completion-menu.completion": "bg:#202020 #d0d0d0",
+    "completion-menu.completion.current": "bg:#005f87 #ffffff",
+    "completion-menu.meta.completion": "bg:#303030 ansibrightblack",
+    "completion-menu.meta.completion.current": "bg:#005f87 #e0e0e0",
+}
+
+
+class PtShell:
+    def __init__(self, stdout=None, cfg_path: Path | None = None):
+        if cfg_path is not None:
+            os.environ["PTSHELL_CONFIG"] = str(cfg_path)
+        self.console = Console(file=stdout) if stdout is not None else Console()
+        self.cfg: dict = cfg_mod.load()
+        self._active_model: str | None = None
+        self.last_campaign = None
+        self.last_report = None
+        self.last_paths: dict[str, Path] = {}
+        self.last_recipient: dict | None = None
+
+    # ------------------------------------------------------------------ #
+    # small rendering helpers
+    # ------------------------------------------------------------------ #
+
+    def _err(self, message: str) -> None:
+        self.console.print(Panel(Text(message, style="red"), border_style="red",
+                                 title="error", title_align="left", padding=(0, 1)))
+
+    def _dim(self, message: str) -> None:
+        self.console.print(Text(message, style="dim"))
+
+    def _panel(self, content, title: str, border: str = "cyan") -> None:
+        self.console.print(Panel(content, title=title, title_align="left",
+                                 border_style=border, padding=(1, 2)))
+
+    def _banner(self) -> None:
+        recipient = self.cfg["recipient_id"] or "first non-executive"
+        body = Text()
+        body.append("PT SHELL", style="bold cyan")
+        body.append("  ·  interactive harness for the phishing-campaign generator\n",
+                    style="dim")
+        body.append(f"settings  ", style="bold")
+        body.append(str(cfg_mod.config_path()) + "\n")
+        body.append(f"model     ", style="bold")
+        body.append(f"{self.cfg['model']}  (adapter: {self.cfg['adapter']})\n")
+        body.append(f"recipient ", style="bold")
+        body.append(f"{recipient}  ·  pretext: {self.cfg['pretext']}  ·  "
+                    f"tone: {self.cfg['tone']}  ·  seed: {self.cfg['seed']}\n")
+        body.append("type /help for commands · /quit to exit", style="dim")
+        self._panel(body, "welcome", border="cyan")
+
+    # ------------------------------------------------------------------ #
+    # plumbing
+    # ------------------------------------------------------------------ #
+
+    def _save_cfg(self) -> None:
+        cfg_mod.save(self.cfg)
+
+    def _apply_model(self) -> None:
+        """Point the ADK pipeline at the configured model (env-driven)."""
+        model = self.cfg["model"]
+        os.environ["ADK_MODEL"] = model
+        if self._active_model != model:
+            # agent.pipeline resolves the model at import time; force a
+            # re-resolve after a mid-session switch.
+            for name in ("agent.pipeline", "agent.config", "agent.driver"):
+                sys.modules.pop(name, None)
+            self._active_model = model
+
+    def _default_recipient_id(self) -> str:
+        from generator_agent.catalog import load_catalog
+
+        internal = [p for p in load_catalog() if p["class"] == "internal"]
+        return str(next(p for p in internal if p["level"] != 1)["id"])
+
+    def _mission(self) -> dict:
+        path = Path(self.cfg["mission"])
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _build_spec(self, mission: dict) -> dict:
+        recipient_id = self.cfg["recipient_id"] or self._default_recipient_id()
+        return {
+            "spec_id": "shell",
+            "campaign_id": mission["campaign_id"],
+            "pretext": self.cfg["pretext"],
+            "tone": self.cfg["tone"],
+            "difficulty": self.cfg["difficulty"],
+            "language": self.cfg["language"],
+            "seed": self.cfg["seed"],
+            "model": mission["model_policy"]["models"][0],
+            "recipient_id": recipient_id,
+            "start_at": self.cfg["start_at"],
+            "followup_minutes": self.cfg["followup_minutes"],
+        }
+
+    def _render_campaign(self, campaign, report) -> None:
+        body = Text()
+        body.append("persona  ", style="bold")
+        body.append(f"{campaign.persona.display_name} "
+                    f"<{campaign.persona.email}>\n")
+        body.append(f"campaign  {campaign.campaign_id} · "
+                    f"{len(campaign.messages)} messages\n\n", style="dim")
+
+        channel_style = {"email": "cyan", "sms": "magenta"}
+        for m in campaign.messages:
+            badge = m.channel.value.upper()
+            body.append(f"  {badge:<5} ", style=channel_style[m.channel.value])
+            body.append(m.message_id, style="bold")
+            body.append(f"  @ {m.scheduled_at}\n", style="dim")
+            if m.subject:
+                body.append(f"    subject  {m.subject}\n")
+            body.append(f"    body     ", style="dim")
+            body.append(f"{m.body[:130]}\n")
+            body.append(f"    cta      {m.call_to_action.landing_url}\n\n",
+                        style="dim")
+        self._panel(body, f"campaign · {campaign.campaign_id}", border="cyan")
+
+        table = Table(title="validator report", box=box.SIMPLE_HEAVY,
+                      header_style="bold", expand=False)
+        table.add_column("check", style="bold")
+        table.add_column("result")
+        table.add_column("detail", style="dim", max_width=90)
+        for r in report.results:
+            if r.passed:
+                table.add_row(r.check.value, Text("✓ PASS", style="green"), r.detail)
+            else:
+                table.add_row(r.check.value, Text("✗ FAIL", style="bold red"), r.detail)
+        self.console.print(table)
+
+        verdict = ("✓ ALL PASSED", "green") if report.all_passed else \
+            ("✗ VIOLATIONS FOUND", "bold red")
+        self.console.print(Text(f"all_passed: {verdict[0]}", style=verdict[1]))
+        self.console.print()
+
+    def _render_config(self) -> None:
+        table = Table(title=f"settings ({cfg_mod.config_path()})",
+                      box=box.SIMPLE_HEAVY, expand=False)
+        table.add_column("key", style="bold cyan")
+        table.add_column("value")
+        table.add_column("valid options", style="dim")
+        for key in sorted(self.cfg):
+            value = str(self.cfg[key]) or "(default)"
+            options = ", ".join(cfg_mod.VALID_VALUES.get(key, ())) or "—"
+            table.add_row(key, value, options)
+        self.console.print(table)
+
+    # ------------------------------------------------------------------ #
+    # dispatch (kept test-friendly: onecmd == dispatch)
+    # ------------------------------------------------------------------ #
+
+    def dispatch(self, line: str) -> bool:
+        line = line.strip().lstrip("/")
+        if not line:
+            return False
+        parts = shlex.split(line)
+        command, arg = parts[0], " ".join(parts[1:])
+        handler = getattr(self, f"cmd_{command}", None)
+        if handler is None:
+            self.console.print(
+                f"[red]unknown command[/red] '{command}' — "
+                f"type [bold]/help[/bold] for the list"
+            )
+            return False
+        try:
+            return bool(handler(arg))
+        except Exception as exc:  # provider, parse, validation failures
+            self._err(f"{type(exc).__name__}: {exc}")
+            return False
+
+    onecmd = dispatch  # compatibility with cmd.Cmd-style callers/tests
+
+    # ------------------------------------------------------------------ #
+    # commands
+    # ------------------------------------------------------------------ #
+
+    def cmd_help(self, arg: str) -> None:
+        name = arg.strip()
+        if name and name in COMMANDS:
+            self.console.print(f"[bold]/{name}[/bold] — {COMMANDS[name]}")
+            return
+        table = Table(title="commands", box=box.SIMPLE_HEAVY, expand=False,
+                      header_style="bold cyan")
+        table.add_column("command", style="bold")
+        table.add_column("description")
+        for key, desc in COMMANDS.items():
+            table.add_row(f"/{key}", desc)
+        self.console.print(table)
+        self._dim("tip: everything also works without the leading slash")
+
+    def cmd_config(self, arg: str) -> None:
+        tokens = shlex.split(arg)
+        if not tokens:
+            self._render_config()
+            return
+        if tokens[0] == "reset":
+            cfg_mod.reset()
+            self.cfg = cfg_mod.load()
+            self.console.print(Text("settings reset to defaults", style="green"))
+            return
+        if len(tokens) == 1:
+            key = tokens[0]
+            if key not in self.cfg:
+                self._err(f"unknown key '{key}'")
+                return
+            self.console.print(f"[bold]{key}[/bold] = {self.cfg[key]}")
+            return
+        if len(tokens) == 2:
+            key, value = tokens
+            error = cfg_mod.validate(key, value)
+            if error:
+                self._err(error)
+                return
+            self.cfg[key] = cfg_mod.coerce(key, value)
+            self._save_cfg()
+            self.console.print(
+                Text(f"{key} = {self.cfg[key]}", style="green") +
+                Text("  (saved)", style="dim")
+            )
+            return
+        self._dim("usage: /config [key [value]] | /config reset")
+
+    def cmd_model(self, arg: str) -> None:
+        tokens = shlex.split(arg)
+        if not tokens:
+            self.console.print(f"model = [bold]{self.cfg['model']}[/bold]")
+            return
+        model = tokens[0]
+        self.cfg["model"] = model
+        self._save_cfg()
+        self._active_model = None
+        self.console.print(
+            Text(f"model = {model}", style="green") +
+            Text("  (applies to the next /generate)", style="dim")
+        )
+
+    def cmd_models(self, arg: str) -> None:
+        table = Table(title="known model ids (LiteLlm format)",
+                      box=box.SIMPLE_HEAVY, expand=False)
+        table.add_column("model id", style="bold")
+        table.add_column("note", style="dim")
+        for m in KNOWN_MODELS:
+            note = "current" if m == self.cfg["model"] else "needs its provider API key"
+            table.add_row(m, note)
+        self.console.print(table)
+
+    def cmd_recipients(self, arg: str) -> None:
+        from generator_agent.catalog import load_catalog
+
+        table = Table(title="persona catalog", box=box.SIMPLE_HEAVY,
+                      header_style="bold", expand=False)
+        table.add_column("id")
+        table.add_column("class")
+        table.add_column("org_type")
+        table.add_column("name / role", style="bold")
+        table.add_column("email", style="dim")
+        class_style = {"internal": "green", "external": "blue"}
+        for p in load_catalog():
+            table.add_row(
+                str(p["id"]),
+                Text(p["class"], style=class_style.get(p["class"], "white")),
+                str(p["org_type"]),
+                f"{p['display_name']} ({p['role'] or '—'})",
+                p["email"],
+            )
+        self.console.print(table)
+
+    def cmd_recipient(self, arg: str) -> None:
+        from generator_agent.catalog import load_catalog
+
+        tokens = shlex.split(arg)
+        if not tokens:
+            self.console.print(
+                f"recipient_id = [bold]{self.cfg['recipient_id'] or '(default)'}[/bold]"
+            )
+            return
+        pid = tokens[0]
+        catalog = load_catalog()
+        match = next((p for p in catalog if str(p["id"]) == pid), None)
+        if match is None:
+            self._err(f"no persona with id '{pid}' — see /recipients")
+            return
+        self.cfg["recipient_id"] = pid
+        self._save_cfg()
+        self.console.print(
+            Text(f"recipient = {pid} ({match['display_name']})", style="green") +
+            Text("  (saved)", style="dim")
+        )
+
+    def cmd_generate(self, arg: str) -> None:
+        mission = self._mission()
+        spec = self._build_spec(mission)
+        self._apply_model()
+        with self.console.status(
+            f"[cyan]generating with {self.cfg['model']} "
+            f"(adapter: {self.cfg['adapter']})…[/cyan]"
+        ):
+            if self.cfg["adapter"] == "stub":
+                from measurement.adapters import get_adapter
+
+                campaign, report = get_adapter("stub").run(spec, mission)
+            else:
+                from agent.driver import run_pipeline
+
+                campaign, report = run_pipeline(spec, mission)
+
+        out = Path(self.cfg["output_dir"]) / mission["campaign_id"]
+        out.mkdir(parents=True, exist_ok=True)
+        campaign_path = out / "generated_campaign.json"
+        report_path = out / "coherence_report.json"
+        campaign_path.write_text(campaign.model_dump_json(indent=2), encoding="utf-8")
+        report_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+
+        from generator_agent.catalog import profile_for
+
+        self.last_campaign = campaign
+        self.last_report = report
+        self.last_paths = {"campaign": campaign_path, "report": report_path}
+        self.last_recipient = profile_for(spec["recipient_id"])
+
+        self._render_campaign(campaign, report)
+        self._dim(f"saved: {campaign_path}")
+        self._dim(f"saved: {report_path}")
+
+    def cmd_validate(self, arg: str) -> None:
+        from app.core.schemas import GeneratedCampaign
+        from validator_agent.validate import validate_campaign
+
+        tokens = shlex.split(arg)
+        path = Path(tokens[0]) if tokens else self.last_paths.get("campaign")
+        if path is None:
+            self._dim("nothing to validate — pass a path or run /generate first")
+            return
+        if not Path(path).exists():
+            self._err(f"no such file: {path}")
+            return
+        try:
+            campaign = GeneratedCampaign.model_validate_json(
+                Path(path).read_text(encoding="utf-8")
+            )
+        except Exception as exc:
+            self._err(f"not a valid GeneratedCampaign: {type(exc).__name__}: {exc}")
+            return
+        report = validate_campaign(campaign)
+        self._render_campaign(campaign, report)
+
+    def cmd_measure(self, arg: str) -> None:
+        from measurement.reliability import run as run_reliability
+
+        runs = 1
+        for tok in shlex.split(arg):
+            if tok.startswith("--runs="):
+                runs = int(tok.split("=", 1)[1])
+        if self.cfg["adapter"] != "stub":
+            self._apply_model()
+        with self.console.status(
+            f"[cyan]running 10-spec reliability suite "
+            f"(adapter: {self.cfg['adapter']}, runs: {runs})…[/cyan]"
+        ):
+            payload = run_reliability(adapter_name=self.cfg["adapter"], runs=runs)
+
+        n_ok = payload["n_runs"] - payload["n_generation_errors"]
+        headline = Text()
+        headline.append("campaigns with ≥ 1 violation: ", style="bold")
+        headline.append(f"{payload['n_campaigns_with_violation']}/{n_ok}",
+                        style="bold red" if payload["n_campaigns_with_violation"]
+                        else "bold green")
+        headline.append(f"   (failure rate {payload['failure_rate']})")
+        self._panel(headline, f"reliability · {payload['adapter']} · "
+                              f"{payload['model']}", border="cyan")
+
+        table = Table(title="violations by coherence check",
+                      box=box.SIMPLE_HEAVY, expand=False)
+        table.add_column("check", style="bold")
+        table.add_column("violations")
+        for check, count in payload["violation_counts"].items():
+            style = "red" if count else "green"
+            table.add_row(check, Text(str(count), style=style))
+        self.console.print(table)
+        self._dim(f"saved: {payload['out_dir']}")
+
+    def cmd_reproduce(self, arg: str) -> None:
+        from measurement.reproduce import run as run_reproduce
+
+        tokens = shlex.split(arg)
+        spec_id = None if "all" in tokens else "S1"
+        if self.cfg["adapter"] != "stub":
+            self._apply_model()
+        with self.console.status(
+            f"[cyan]reproducibility run: adapter {self.cfg['adapter']}, "
+            f"spec {'all' if spec_id is None else spec_id} × 2…[/cyan]"
+        ):
+            results = run_reproduce(
+                spec_id=spec_id, runs=2, adapter_name=self.cfg["adapter"]
+            )
+
+        table = Table(title="reproducibility", box=box.SIMPLE_HEAVY, expand=False)
+        table.add_column("spec", style="bold")
+        table.add_column("seed")
+        table.add_column("content")
+        table.add_column("deterministic layer")
+        table.add_column("errors")
+        for sid, res in results["specs"].items():
+            content = (Text("identical", style="green") if res["identical"]
+                       else Text("DIFFERENT", style="bold red"))
+            layer = (Text("identical", style="green")
+                     if res["deterministic_layer_identical"]
+                     else Text("DIFFERENT", style="bold red"))
+            errors = sum(1 for r in res["runs"] if r["status"] != "ok")
+            table.add_row(sid, str(res["seed"]), content, layer, str(errors))
+        self.console.print(table)
+        self._dim(f"saved: {results['out_dir']}")
+
+    def cmd_send(self, arg: str) -> None:
+        from generator_agent.send import send_campaign
+
+        campaign_path = self.last_paths.get("campaign")
+        if campaign_path is None or not Path(campaign_path).exists():
+            self._dim("nothing to send — run /generate first")
+            return
+        if self.last_recipient is None:
+            self._dim("no recipient recorded — run /generate first")
+            return
+        to_addr = self.last_recipient["recipient"]["email"]
+        with self.console.status("[cyan]sending to the MailHog sink…[/cyan]"):
+            try:
+                n = send_campaign(str(campaign_path), to_addr, "localhost", 1025)
+            except ConnectionRefusedError:
+                self._err("no SMTP sink — start it with: docker compose up -d")
+                return
+        self.console.print(
+            Text(f"delivered {n} messages to {to_addr}", style="green") +
+            Text("  — open http://localhost:8025", style="dim")
+        )
+
+    def cmd_status(self, arg: str) -> None:
+        self._render_config()
+        if self.last_campaign is None:
+            self._dim("last run: none yet — /generate to create one")
+            return
+        body = Text()
+        body.append("campaign   ", style="bold")
+        body.append(self.last_campaign.campaign_id + "\n")
+        failing = [r.check.value for r in self.last_report.results if not r.passed]
+        body.append("all_passed ", style="bold")
+        verdict = "✓ True" if self.last_report.all_passed else "✗ False"
+        body.append(verdict + "\n", style="green" if self.last_report.all_passed
+                    else "bold red")
+        body.append("failing    ", style="bold")
+        body.append(", ".join(failing) if failing else "none")
+        if self.last_paths.get("campaign"):
+            body.append("\nfiles      ", style="bold")
+            body.append(str(self.last_paths["campaign"]) + "\n           ")
+            body.append(str(self.last_paths["report"]))
+        self._panel(body, "last run", border="cyan")
+
+    def cmd_quit(self, arg: str) -> bool:
+        self.console.print(Text("bye.", style="green"))
+        return True
+
+    cmd_exit = cmd_quit
+
+    # ------------------------------------------------------------------ #
+    # interactive loop (prompt_toolkit)
+    # ------------------------------------------------------------------ #
+
+    def run(self) -> None:
+        try:
+            from prompt_toolkit import HTML, PromptSession
+            from prompt_toolkit.completion import Completion, Completer
+            from prompt_toolkit.history import FileHistory
+            from prompt_toolkit.styles import Style
+        except ImportError:
+            print("install prompt_toolkit to run the interactive shell: "
+                  "pip install prompt_toolkit rich")
+            raise SystemExit(1)
+
+        shell = self
+
+        class ShellCompleter(Completer):
+            def get_completions(self, document, complete_event):
+                text = document.text_before_cursor.lstrip("/")
+                parts = text.split()
+                on_cmd = not text or text[-1] != " "
+                if len(parts) == 0 or (len(parts) == 1 and on_cmd):
+                    prefix = parts[0] if parts else ""
+                    for name, desc in COMMANDS.items():
+                        if name.startswith(prefix):
+                            yield Completion(
+                                f"/{name}", start_position=-len(prefix),
+                                display_meta=desc,
+                            )
+                    return
+                command, arg = parts[0], parts[1] if len(parts) > 1 else ""
+                if command == "config" and len(parts) <= 2:
+                    for key in sorted(shell.cfg) + ["reset"]:
+                        if key.startswith(arg):
+                            yield Completion(
+                                key, start_position=-len(arg),
+                                display_meta=f"{shell.cfg.get(key, 'defaults')}",
+                            )
+                elif command == "recipient":
+                    from generator_agent.catalog import load_catalog
+
+                    for p in load_catalog():
+                        pid = str(p["id"])
+                        if pid.startswith(arg):
+                            yield Completion(
+                                pid, start_position=-len(arg),
+                                display_meta=p["display_name"],
+                            )
+                elif command == "model":
+                    for m in KNOWN_MODELS:
+                        if m.startswith(arg):
+                            yield Completion(m, start_position=-len(arg))
+
+        history_path = cfg_mod.config_path().parent / "history"
+        history_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self._banner()
+        session = PromptSession(
+            history=FileHistory(str(history_path)),
+            completer=ShellCompleter(),
+            style=Style.from_dict(_PROMPT_STYLE),
+        )
+
+        while True:
+            model = self.cfg["model"]
+            adapter = self.cfg["adapter"]
+            seed = self.cfg["seed"]
+            prompt_html = HTML(
+                f"<prompt>pt</prompt>"
+                f"<prompt.dim> · {model} · {adapter} · seed {seed}</prompt.dim> &gt; "
+            )
+            recipient = self.cfg["recipient_id"] or "default recipient"
+            toolbar = HTML(
+                f"<bottom-toolbar>{self.cfg['pretext']} / "
+                f"{self.cfg['tone']} / {self.cfg['difficulty']} · "
+                f"{recipient} · /help</bottom-toolbar>"
+            )
+            try:
+                line = session.prompt(prompt_html, bottom_toolbar=lambda: toolbar)
+            except KeyboardInterrupt:
+                continue
+            except EOFError:
+                self.console.print()
+                break
+            if self.dispatch(line):
+                break
+
+
+def main() -> None:
+    try:
+        PtShell().run()
+    except KeyboardInterrupt:
+        print()
+
+
+if __name__ == "__main__":
+    main()

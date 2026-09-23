@@ -1,0 +1,25 @@
+{
+  "adapter": "adk",
+  "specs": {
+    "S1": {
+      "seed": 42,
+      "model": "deepseek-chat",
+      "runs": [
+        {
+          "run": 1,
+          "status": "ok",
+          "campaign_hash": "49a4beb78281f84edde3dc42001d8c95e7d8c9261179b13e5d286a273e584364",
+          "deterministic_layer_hash": "1c7e341c45309ab23f6db81b77c491c06d27ce5c1c74d6ce4bcb7033393553a5"
+        },
+        {
+          "run": 2,
+          "status": "ok",
+          "campaign_hash": "ee65d5bfc6a280cf0a919f7dbf0eebabacaa8f49dc2e42f93190b9b72d3e9262",
+          "deterministic_layer_hash": "1c7e341c45309ab23f6db81b77c491c06d27ce5c1c74d6ce4bcb7033393553a5"
+        }
+      ],
+      "identical": false,
+      "deterministic_layer_identical": true
+    }
+  }
+}

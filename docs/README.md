@@ -10,43 +10,46 @@ Welcome to the documentation for **[Project Name]**, a configurable, reproducibl
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](./architecture.md) | Stage roles, the pipeline (Phases 0–4), and the communication graph. |
-| [Flow Schema](./flow-schema.md) | JSON data contracts for every stage hand-off across the pipeline. |
-| [Diagrams](../diagrams_output/) | Rendered architecture diagrams (PNG, 300 DPI). **Stale — regenerate after this realignment.** |
-| [Project README](../README.md) | Installation, quick start, and configuration. |
+| [PT Shell User Guide](./pt-shell-guide.md) | **How to use the tool**: install, launch, commands, settings, models, offline mode, measurement, troubleshooting. |
+| [Architecture](./architecture.md) | Stage roles (ADK pipeline), phases, and the measurement loop. |
+| [Flow Schema](./flow-schema.md) | JSON data contracts for every hand-off across the pipeline. |
+| [Generator reliability plan](./generator-reliability-plan.md) | The design rationale behind the current build (workstreams W0–W5). |
+| [Diagrams](../diagrams_output/) | Rendered architecture diagrams (PNG, 300 DPI). |
+| [Project README](../README.md) | Installation, quick start, project structure, and configuration. |
 
 ---
 
 ## Overview
 
-The system decomposes campaign generation into single-responsibility stages coordinated by an orchestrator:
+The pipeline is a **Google ADK** agent graph — a linear, non-autonomous
+`SequentialAgent` with three stages. Only the first stage calls an LLM.
 
-| Stage | Role | Responsibility |
+| Stage | Kind | Responsibility |
 |-------|------|----------------|
-| **Orchestrator-AG** | Coordination | Reads the `MissionConfig`, enforces constraints, fixes the seed and model policy, drives the run. |
-| **Recon-AG** | Intelligence | Synthetic targets/domains and simulated attack surfaces (no external collection). |
-| **Profiler-AG** | Synthetic data | Labeled synthetic recipient profiles built from the targets (no external collection). |
-| **Generator-AG** | LLM generation | Generates email and SMS content through model-family adapters (≥ 2 families), recording provenance. |
-| **Validator-AG** | Coherence & provenance | Runs the coherence validators (persona / timing / cross-channel reference) and finalizes the provenance log. |
+| `generator_content_agent` | ADK `LlmAgent` | Writes content bindings (persona + email subject/body + SMS body) in the requested tone/difficulty/language. |
+| `assembler_agent` | ADK `BaseAgent` (deterministic) | Builds the `GeneratedCampaign`: ids, persona, seed-derived tracking link, schedule, references, provenance. |
+| `validator_agent` | ADK `BaseAgent` (deterministic) | Runs the four coherence checks (persona, timing, reference existence, link consistency) and emits the `CoherenceReport`. |
 
-See [architecture.md](./architecture.md) for the full pipeline, per-phase outputs, and the stage communication diagram.
+See [architecture.md](./architecture.md) for the full pipeline, per-phase outputs,
+and the stage communication diagram.
 
 ---
 
 ## Pipeline at a glance
 
 ```
-Phase 0  Planning                  (Orchestrator-AG) → MissionConfig (channels, model policy, seed)
-Phase 1  Synthetic Reconnaissance  (Recon-AG)        → synthetic targets + attack surfaces
-Phase 2  Profiling & Content       (Profiler-AG)     → recipient profiles + prompt templates + assets
-Phase 3  Generation                (Generator-AG)    → GeneratedMessage (email/SMS) + provenance
-Phase 4  Coherence & Provenance    (Validator-AG)    → CoherenceReport + ProvenanceLog
+Phase 0  Config                     → MissionConfig + CampaignSpec + PersonaCatalog (seeded into ADK state)
+Phase 1  Generation  (Generator-AG) → GeneratedCampaign (email + SMS) with provenance
+Phase 2  Verification (Validator-AG) → CoherenceReport (4 checks) + ProvenanceLog
+Phase 3  Measurement (harness)      → reproducibility.json + reliability.json + summary.md
 ```
 
 ---
 
 ## Working with the docs
 
+- **Use the tool interactively:** `python -m ptshell` — see the
+  [PT Shell User Guide](./pt-shell-guide.md).
 - **Architecture diagrams** are generated from code. Regenerate them after editing the pipeline:
 
   ```bash
