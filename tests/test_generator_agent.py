@@ -117,3 +117,33 @@ def test_tracking_token_is_seed_derived_not_random():
     for message in CAMPAIGN.messages:
         url = str(message.call_to_action.landing_url)
         assert url.endswith("/t/" + tracking_token("q3-awareness-2026", 42))
+
+
+def test_normalize_body_links_rewrites_stale_tokens():
+    """Stale tokens copied into prose are rewritten to the campaign token."""
+    from generator_agent.assemble import normalize_body_links
+
+    token = "8b9dc310f705"
+    full = "Click here: https://sim.fantazylabz.tech/t/abc123 today."
+    assert normalize_body_links(full, token) == \
+        "Click here: https://sim.fantazylabz.tech/t/8b9dc310f705 today."
+    bare = "link: sim.fantazylabz.tech/t/abc123, hurry"
+    assert normalize_body_links(bare, token) == \
+        "link: sim.fantazylabz.tech/t/8b9dc310f705, hurry"
+    # non-tracking urls and unrelated text are untouched
+    untouched = "see https://example.com/a/b and nothing else"
+    assert normalize_body_links(untouched, token) == untouched
+
+
+def test_assemble_normalizes_a_stale_sms_link():
+    """A model-written 'abc123' in the SMS body is fixed by construction."""
+    stale = dict(BINDINGS, SMS_BODY=(
+        "Hi Rebecca, need it today - link: sim.fantazylabz.tech/t/abc123"
+    ))
+    campaign = assemble_campaign(
+        stale, MISSION, PROFILE, "executive_request", "urgent", "medium"
+    )
+    token = campaign.messages[0].call_to_action.landing_url
+    assert str(token).endswith("8b9dc310f705")
+    assert "abc123" not in campaign.messages[1].body
+    assert "8b9dc310f705" in campaign.messages[1].body

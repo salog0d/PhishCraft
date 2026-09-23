@@ -40,6 +40,12 @@ def parse_bindings(text: str) -> dict[str, str]:
             raise ValueError(f"bindings missing '{label}'")
         bindings[key] = lines[cursor].split(":", 1)[-1].strip()
         cursor += 1
+    for key, value in bindings.items():
+        if "[" in value or "]" in value:
+            raise ValueError(
+                f"binding {key} echoed a prompt placeholder instead of a value: "
+                f"{value!r}"
+            )
     return bindings
 
 
@@ -71,6 +77,7 @@ class AssemblerAgent(BaseAgent):
             scheduled=(email_at, sms_at),  # spec-derived schedule (W1)
             actual_model=spec.get("model"),
             runtime={"sdk": "google-adk", "adapter": "adk"},
+            language=spec.get("language", "en"),
         )
         yield Event(
             author=self.name,

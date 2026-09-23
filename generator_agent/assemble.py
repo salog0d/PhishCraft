@@ -11,6 +11,7 @@ provenance hash is only honest if it stays mirroring the query in ``agent.py``.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from hashlib import sha256
 
@@ -30,6 +31,7 @@ You turn a `PhishingGenerationRequest` (plus its seed prompt template) into one 
 Hard rules:
 - Email messages **must** have a `subject`; SMS messages **must not** (and stay ≤ 1600 characters).
 - The `sender` must stay identical to the campaign persona across every message (the impersonated identity is the same everywhere).
+- The campaign has **one** tracking link: the landing URL given in the user message. If your body or subject mentions a link, copy that exact URL — **never invent a tracking token**.
 - `provenance` records the exact `model`, `params` (including the `seed`), `prompt_template_id`, and `prompt_hash` (sha256 of the rendered prompt) actually used.
 - `references` may only cite `message_id`s that already exist earlier in the campaign; a follow‑up is scheduled **after** what it references.
 
@@ -45,7 +47,7 @@ Hard rules:
   "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech", "impersonated_brand": "Fantazy Labz" },
   "subject": "Quick approval needed before EOD",
   "body": "Rebecca, I'm finalizing the Q3 vendor payment and need your sign-off today. Please review the summary and confirm. — Elena",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/abc123", "button_label": "Review Summary" },
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/<campaign-token>", "button_label": "Review Summary" },
   "references": [],
   "provenance": {
     "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
@@ -66,8 +68,8 @@ Hard rules:
   "channel": "sms",
   "scheduled_at": "2026-08-20T10:15:00Z",
   "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech" },
-  "body": "Hi Rebecca, did you get my email about the Q3 approval? Need it before EOD - link: sim.fantazylabz.tech/t/abc123",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/abc123" },
+  "body": "Hi Rebecca, did you get my email about the Q3 approval? Need it before EOD - link: sim.fantazylabz.tech/t/<campaign-token>",
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/<campaign-token>" },
   "references": ["msg-0001"],
   "provenance": {
     "model": { "family": "openai", "name": "gpt-4.1", "adapter_version": "1.0" },
@@ -126,16 +128,45 @@ def tracking_token(campaign_id: str, seed: int) -> str:
     return sha256(f"{campaign_id}:{seed}".encode()).hexdigest()[:12]
 
 
+def landing_url_for(mission_config: dict, profile: dict) -> str:
+    """The campaign's single tracking link, derived from campaign + seed."""
+    seed = mission_config["reproducibility"]["seed"]
+    token = tracking_token(mission_config["campaign_id"], seed)
+    domain = profile["recipient"]["email"].rsplit("@", 1)[-1]
+    return f"https://sim.{domain}/t/{token}"
+
+
+_TOKEN_IN_LINK = re.compile(r"(sim\.[A-Za-z0-9.-]+/t/)[A-Za-z0-9_-]+")
+
+
+def normalize_body_links(text: str, token: str) -> str:
+    """Rewrite any tracking token written into prose to the campaign token.
+
+    The model writes free-form bodies and may copy a stale token from its
+    few-shot examples; this makes the link consistent by construction, the
+    same way persona/ids/schedule already are.
+    """
+    return _TOKEN_IN_LINK.sub(lambda m: f"{m.group(1)}{token}", text)
+
+
 def user_prompt(
-    mission_config: dict, profile: dict, pretext: str, tone: str, difficulty: str
+    mission_config: dict,
+    profile: dict,
+    pretext: str,
+    tone: str,
+    difficulty: str,
+    language: str = "en",
 ) -> str:
     """The query's user segment — mirrors the user text in ``agent.py``."""
     recipient = profile["recipient"]
+    landing_url = landing_url_for(mission_config, profile)
     return (
         f"Campaign {mission_config['campaign_id']}, pretext={pretext}, "
-        f"tone={tone}, difficulty={difficulty}.\n"
+        f"tone={tone}, difficulty={difficulty}, language={language}.\n"
         f"Recipient: {recipient['full_name']} ({recipient['role']}, "
         f"{recipient['department']}).\n"
+        f"The campaign's single landing URL (if you write a link, copy this "
+        f"exact URL): {landing_url}\n"
         "The impersonated persona (it must be one single identity, used for "
         "every message):\n"
         "- display name: [PERSONA_NAME]\n"
@@ -152,14 +183,22 @@ def user_prompt(
 
 
 def rendered_prompt(
-    mission_config: dict, profile: dict, pretext: str, tone: str, difficulty: str
+    mission_config: dict,
+    profile: dict,
+    pretext: str,
+    tone: str,
+    difficulty: str,
+    language: str = "en",
 ) -> str:
     """Rebuild the exact prompt text the query in ``agent.py`` sends.
 
     The ``prompt_hash`` in provenance is the sha256 of this string — keep the
     query template and this function mirroring each other.
     """
-    return f"system:\n{CHARTER}\n\nuser: {user_prompt(mission_config, profile, pretext, tone, difficulty)}"
+    return (
+        f"system:\n{CHARTER}\n\nuser: "
+        f"{user_prompt(mission_config, profile, pretext, tone, difficulty, language)}"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -178,6 +217,7 @@ def assemble_campaign(
     scheduled: tuple[str, str] | None = None,
     actual_model: dict | None = None,
     runtime: dict[str, str] | None = None,
+    language: str = "en",
 ) -> GeneratedCampaign:
     """Build the ``GeneratedCampaign`` from the query's bound variables.
 
@@ -191,6 +231,9 @@ def assemble_campaign(
       so a cited id always exists.
     - **channel shaping** — email gets a subject; SMS gets none (this function
       never copies one).
+    - **link consistency** — any tracking token the model wrote into prose is
+      normalized to the campaign token, so body links match the CTA by
+      construction.
     - **determinism** — with fixed ``generated_at`` + ``scheduled``, the same
       inputs produce byte-identical output (no uuid, no clock reads).
     """
@@ -209,16 +252,22 @@ def assemble_campaign(
     sender = {"display_name": persona["display_name"], "from_address": persona["email"]}
 
     seed = mission_config["reproducibility"]["seed"]
-    email_domain = profile["recipient"]["email"].rsplit("@", 1)[-1]
     token = tracking_token(mission_config["campaign_id"], seed)
-    landing_url = f"https://sim.{email_domain}/t/{token}"
+    landing_url = landing_url_for(mission_config, profile)
     cta_type, cta_label = CTA_BY_PRETEXT.get(pretext, ("click_link", "Open"))
     cta = {"type": cta_type, "landing_url": landing_url, "button_label": cta_label}
+
+    # Normalize any stale token the model copied into prose (W: link fix).
+    email_subject = normalize_body_links(b["EMAIL_SUBJECT"], token)
+    email_body = normalize_body_links(b["EMAIL_BODY"], token)
+    sms_body = normalize_body_links(b["SMS_BODY"], token)
 
     model = actual_model or mission_config["model_policy"]["models"][0]
     runtime_info = runtime or {"sdk": "google-adk"}
     prompt_hash = sha256(
-        rendered_prompt(mission_config, profile, pretext, tone, difficulty).encode()
+        rendered_prompt(
+            mission_config, profile, pretext, tone, difficulty, language
+        ).encode()
     ).hexdigest()
     now = (generated_at or datetime.now(timezone.utc)).isoformat().replace("+00:00", "Z")
     email_at, sms_at = scheduled if scheduled else (b["EMAIL_TIME"], b["SMS_TIME"])
@@ -239,8 +288,8 @@ def assemble_campaign(
             "channel": "email",
             "scheduled_at": email_at,
             "sender": sender,
-            "subject": b["EMAIL_SUBJECT"],  # email only, by construction
-            "body": b["EMAIL_BODY"],
+            "subject": email_subject,  # email only, by construction
+            "body": email_body,
             "call_to_action": cta,
             "references": [],
             "provenance": provenance(
@@ -253,7 +302,7 @@ def assemble_campaign(
             "channel": "sms",
             "scheduled_at": sms_at,
             "sender": sender,  # identical persona, by construction
-            "body": b["SMS_BODY"],  # no subject, by construction
+            "body": sms_body,  # no subject, by construction
             "call_to_action": cta,
             "references": ["msg-0001"],  # the cited id exists, by construction
             "provenance": provenance(
