@@ -97,6 +97,116 @@ uvicorn app.main:app --reload
 
 ---
 
+## Project structure
+
+Every file's job, grouped by directory.
+
+### Root
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `README.md` | This file: project framing, install, quick start, and structure. |
+| `requirements.txt` | Pinned dependencies (`google-adk`, `litellm`, `fastapi`, `pydantic`, …). |
+| `compose.yaml` | Local MailHog SMTP sink used by `--send` (delivery sandbox). |
+| `implementation-instructions.md` | Step-by-step execution plan (ADK pipeline + measurement) for an implementing agent. |
+| `.gitignore` | Excludes `venv/`, caches, `.env`, and other non-versioned files. |
+
+### `agent/` — the Google ADK pipeline
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `agent/pipeline.py` | The ADK `SequentialAgent` (the orchestrator): content `LlmAgent` → deterministic assembler → deterministic validator. |
+| `agent/config.py` | Model resolution from env (`ADK_MODEL`, `DEEPSEEK_API_KEY`); loads the gitignored `.env`; no secrets in code. |
+| `agent/assembler.py` | Stage 2: parses the 8 content bindings and calls `assemble_campaign` with the fixed clock/schedule. |
+| `agent/validator.py` | Stage 3: runs `validator_agent.validate_campaign` and emits the `CoherenceReport`. |
+| `agent/driver.py` | Programmatic runner: seeds session state, drives the ADK `Runner`, returns campaign + report. |
+| `agent/__init__.py` | Package marker exposing `root_agent`. |
+
+### `app/` — the FastAPI service and data contracts
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `app/main.py` | FastAPI entry point (`uvicorn app.main:app`); registers routes and `/health`. |
+| `app/presentation/routes.py` | `POST /generation/messages`: validates a `PhishingGenerationRequest` and returns the 202 acknowledgement. |
+| `app/core/schemas.py` | **Single source of truth**: all Pydantic contracts (mission, generation, campaign, coherence, provenance, envelope) and their business rules. |
+| `app/application/`, `app/domain/`, `app/infra/`, `app/services/`, `app/__init__.py`, `app/presentation/__init__.py`, `app/core/__init.py__.py` | Package markers; empty placeholders for the hex/clean architecture layers. |
+
+### `generator_agent/` — the generator half
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `generator_agent/assemble.py` | Model-free, **deterministic** assembler: seed-derived tracking token, persona stamping, references, provenance, and the charter constant. Unit-tested with no API key. |
+| `generator_agent/catalog.py` | Loads the persona catalog (12 internal + external) and builds generator profiles from it. |
+| `generator_agent/run.py` | CLI: loads a mission file, drives the ADK pipeline, writes campaign + report, optional `--send`. |
+| `generator_agent/send.py` | Delivers a campaign to the MailHog SMTP sink (email as email, SMS tagged `[SMS]`). |
+| `generator_agent/agent.py` | **Legacy reference**: the old LMQL query; superseded by the ADK content agent, kept for documentation only. |
+| `generator_agent/__init__.py` | Package marker. |
+
+### `validator_agent/` — the deterministic validator (no LLM)
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `validator_agent/validate.py` | The four coherence checks (persona, timing, reference existence, **link consistency**); always emits a `CoherenceReport`, never raises. |
+| `validator_agent/links.py` | URL/token extraction used by the `link_consistency` check. |
+| `validator_agent/__init__.py` | Package marker exposing `validate_campaign`. |
+
+### `measurement/` — the reproducibility & reliability harness
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `measurement/specs.py` | The 10-spec baseline (`CampaignSpec`): recipients, pretexts, tones, seeds. |
+| `measurement/adapters.py` | `AdkPipelineAdapter` (real, drives ADK) and `StubAdapter` (offline CI path). |
+| `measurement/runner.py` | Runs one spec, catches every failure as a `generation_error` record, computes canonical hashes. |
+| `measurement/reproduce.py` | CLI: same spec × N runs → `reproducibility.json` (content + deterministic-layer hashes). |
+| `measurement/reliability.py` | CLI: all specs → `reliability.json` + `summary.md` with the violation/failure-rate tables. |
+| `measurement/__init__.py` | Package marker. |
+
+### `org/` — synthetic people (the simulation context)
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `org/fantazylabz_org.json` | The 12-person internal roster (BEC-relevant roles). |
+| `org/external_personas.json` | External BEC personas: a supplier and a bank (`.example` domains). |
+| `org/fantazylabz_org.md` | Human-readable roster by department. |
+| `org/fantazylabz_org_graph.md` | Org chart (Mermaid + text tree). |
+
+### `prompts/` — stage charters
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `prompts/generator_ag.md` | The content agent's charter (few-shot examples the LLM conditions on). |
+| `prompts/validator_ag.md` | Documentation-parity charter for the 4 checks; the code module is authoritative. |
+| `prompts/orchestrator_ag.md` | Non-executable design note: the orchestrator is the ADK `SequentialAgent`. |
+
+### `docs/` — documentation
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `docs/architecture.md` | Stage architecture, phases, and the measurement loop. |
+| `docs/flow-schema.md` | Every JSON contract with examples and business rules. |
+| `docs/generator-reliability-plan.md` | The design rationale behind this build (workstreams W0–W5). |
+| `docs/models.md` | Candidate model catalog (fine-tuned + foundation baselines). |
+| `docs/README.md` | Docs index. |
+
+### `config/`, `scripts/`, `tests/`, `data/`, `diagrams_output/`
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `config/q3-awareness-2026.mission.json` | Default `MissionConfig` file (authorized, synthetic-only, seed 42). |
+| `scripts/generate_diagrams.py` | Regenerates the five architecture diagrams into `diagrams_output/`. |
+| `tests/test_flow_contracts.py` | Business-rule and persistence-rule tests for the schemas. |
+| `tests/test_generator_agent.py` | Offline tests for the deterministic assembler (incl. determinism + token tests). |
+| `tests/test_validator_agent.py` | Regression: the validator must catch the known `abc123` vs `d6db8064874a` link failure. |
+| `tests/test_send.py` | Campaign-message → email mapping (no SMTP, no network). |
+| `tests/__init__.py` | Test package marker. |
+| `diagrams_output/diagram_*.png` | Rendered architecture diagrams (regenerate, don't hand-edit). |
+| `data/q3-awareness-2026/generated_campaign.json` | **Committed evidence**: the original sample containing the cross-channel link bug. |
+| `data/measurements/known-case/generated_campaign.json` | Preserved copy of that evidence, consumed by the validator regression test. |
+| `data/measurements/reproduce-adk/` | Reproducibility results (seed 42 run twice, byte-identical). |
+| `data/measurements/reliability-adk-*/` | Reliability results (`reliability.json` + `summary.md`: the failure-rate tables). |
+
+---
+
 ## Documentation
 
 - **Documentation home:** [`docs/`](./docs/README.md) · **Hosted docs:** [https://[docs-url]](https://[docs-url])
