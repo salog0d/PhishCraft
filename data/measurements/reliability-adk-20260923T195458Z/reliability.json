@@ -1,0 +1,118 @@
+{
+  "adapter": "adk",
+  "model": "deepseek-chat",
+  "n_specs": 10,
+  "n_runs": 10,
+  "n_generation_errors": 0,
+  "n_campaigns_with_violation": 0,
+  "failure_rate": 0.0,
+  "violation_counts": {
+    "persona_identity": 0,
+    "timing": 0,
+    "cross_channel_reference": 0,
+    "link_consistency": 0
+  },
+  "per_spec": [
+    {
+      "spec_id": "S1",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "ee65d5bfc6a280cf0a919f7dbf0eebabacaa8f49dc2e42f93190b9b72d3e9262",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 5894
+    },
+    {
+      "spec_id": "S2",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "ee65d5bfc6a280cf0a919f7dbf0eebabacaa8f49dc2e42f93190b9b72d3e9262",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 1643
+    },
+    {
+      "spec_id": "S3",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "424e2a44fc544ed579a24fda28502f422e84a85fa948d8dfdabb3e3b134ab887",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 1885
+    },
+    {
+      "spec_id": "S4",
+      "run": 1,
+      "seed": 7,
+      "status": "ok",
+      "campaign_hash": "cc8037c12432de7bbfe4c3bba57ce564ac9a8dc44626cb859a6703a71e1b98af",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 3155
+    },
+    {
+      "spec_id": "S5",
+      "run": 1,
+      "seed": 13,
+      "status": "ok",
+      "campaign_hash": "2615a9b0900a86ddfb6c25ddd1f7e174680b6fd5c28e86dad7d29f28c5d86f5c",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 3986
+    },
+    {
+      "spec_id": "S6",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "d5c49d70b85ab9d5c0aaf3dd0b62350a1518208b9641e8c631e0bbf9bab9110a",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 2038
+    },
+    {
+      "spec_id": "S7",
+      "run": 1,
+      "seed": 99,
+      "status": "ok",
+      "campaign_hash": "8eec32928e948fe2bd0bb64d15d73a5107dcf213495a92ab56802fcee5dff142",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 2923
+    },
+    {
+      "spec_id": "S8",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "4845e2bfa827ce5816cc06f71adf65a2e57f4a493bde3777e76988e9bcdbe6e5",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 3075
+    },
+    {
+      "spec_id": "S9",
+      "run": 1,
+      "seed": 5,
+      "status": "ok",
+      "campaign_hash": "87e88c0aff89d7441643016c1380719cb5711ff4ef534ce16f92cf8967e102b2",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 1844
+    },
+    {
+      "spec_id": "S10",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "2881047e7df38cba9521c3a24af3df931df6c9d91ccbc4bc7d19bce2e1cb9d2e",
+      "failing_checks": [],
+      "error": null,
+      "duration_ms": 1670
+    }
+  ],
+  "out_dir": "data/measurements/reliability-adk-20260923T195458Z"
+}

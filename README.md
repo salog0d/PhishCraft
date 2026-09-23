@@ -97,6 +97,40 @@ uvicorn app.main:app --reload
 
 ---
 
+## Interactive shell (harness)
+
+`python -m ptshell` opens a Claude-Code-style interactive REPL over the
+generator: a styled terminal UI (rich panels/tables, spinners, ✓/✗ badges),
+a colored prompt with the model inline, tab-completion with descriptions, and
+persistent command history. Configure everything in-session; settings persist
+to `~/.pt-shell/config.json` (override the location with the `PTSHELL_CONFIG`
+env var). All commands work with or without the leading slash.
+
+```bash
+python -m ptshell
+```
+
+**Full usage guide:** [`docs/pt-shell-guide.md`](./docs/pt-shell-guide.md).
+
+| Command | What it does |
+|---------|--------------|
+| `/help` | List commands. |
+| `/config [key [value]]` | View or set settings (e.g. `/config seed 7`, `/config pretext invoice_payment`); `/config reset` restores defaults. |
+| `/model <id>` · `/models` | Set or list the generation model (e.g. `deepseek/deepseek-chat`). Model switches apply to the next `/generate`. |
+| `/recipient <id>` · `/recipients` | Set the default recipient or list the persona catalog (12 internal + supplier/bank). |
+| `/generate` | Run the ADK pipeline once with the current settings; prints the campaign + the 4-check validator report and saves both under `data/shell/<campaign_id>/`. |
+| `/validate [campaign.json]` | Run the 4 coherence checks on a campaign file (defaults to the last generated one). |
+| `/measure [--runs=N]` | Run the 10-spec reliability suite and print the failure-rate table (writes `summary.md`). |
+| `/reproduce [all]` | Run the same spec twice and compare (default: spec S1, seed 42). |
+| `/send` | Deliver the last generated campaign to the MailHog sink (`docker compose up -d`). |
+| `/status` | Show current settings and the last run summary. |
+| `/quit` | Exit (also `/exit` or Ctrl-D). |
+
+Offline mode: `/config adapter stub` makes `/generate`, `/measure`, and
+`/reproduce` run without any LLM call — useful for demos and CI.
+
+---
+
 ## Project structure
 
 Every file's job, grouped by directory.
@@ -183,10 +217,20 @@ Every file's job, grouped by directory.
 | File | What it is / why it matters |
 |------|------------------------------|
 | `docs/architecture.md` | Stage architecture, phases, and the measurement loop. |
+| `docs/pt-shell-guide.md` | **User guide**: install, commands, settings, models, offline mode, measurement, troubleshooting. |
 | `docs/flow-schema.md` | Every JSON contract with examples and business rules. |
 | `docs/generator-reliability-plan.md` | The design rationale behind this build (workstreams W0–W5). |
 | `docs/models.md` | Candidate model catalog (fine-tuned + foundation baselines). |
 | `docs/README.md` | Docs index. |
+
+### `ptshell/` — the interactive harness (Claude-Code-style REPL)
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `ptshell/shell.py` | The REPL (`cmd.Cmd`): slash commands `/generate`, `/validate`, `/measure`, `/reproduce`, `/send`, `/config`, … each capability is a `do_*` method. |
+| `ptshell/config.py` | Persistent settings (`~/.pt-shell/config.json`, override `PTSHELL_CONFIG`): defaults, validation, and save/reset. |
+| `ptshell/__main__.py` | Entry point: `python -m ptshell`. |
+| `ptshell/__init__.py` | Package marker. |
 
 ### `config/`, `scripts/`, `tests/`, `data/`, `diagrams_output/`
 
@@ -198,6 +242,7 @@ Every file's job, grouped by directory.
 | `tests/test_generator_agent.py` | Offline tests for the deterministic assembler (incl. determinism + token tests). |
 | `tests/test_validator_agent.py` | Regression: the validator must catch the known `abc123` vs `d6db8064874a` link failure. |
 | `tests/test_send.py` | Campaign-message → email mapping (no SMTP, no network). |
+| `tests/test_ptshell.py` | Offline tests for the interactive shell (config persistence + every command). |
 | `tests/__init__.py` | Test package marker. |
 | `diagrams_output/diagram_*.png` | Rendered architecture diagrams (regenerate, don't hand-edit). |
 | `data/q3-awareness-2026/generated_campaign.json` | **Committed evidence**: the original sample containing the cross-channel link bug. |
@@ -210,6 +255,7 @@ Every file's job, grouped by directory.
 ## Documentation
 
 - **Documentation home:** [`docs/`](./docs/README.md) · **Hosted docs:** [https://[docs-url]](https://[docs-url])
+- **Interactive shell guide:** [`docs/pt-shell-guide.md`](./docs/pt-shell-guide.md)
 - **Architecture & pipeline design:** [`docs/architecture.md`](./docs/architecture.md)
 - **Data contracts (JSON):** [`docs/flow-schema.md`](./docs/flow-schema.md)
 - **Architecture diagrams:** [`diagrams_output/`](./diagrams_output/) — regenerate with `python3 scripts/generate_diagrams.py`
