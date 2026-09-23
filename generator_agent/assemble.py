@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from hashlib import sha256
-from uuid import uuid4
 
 from app.core.schemas import GeneratedCampaign
 
@@ -122,6 +121,11 @@ BINDING_KEYS = (
 # --------------------------------------------------------------------------- #
 
 
+def tracking_token(campaign_id: str, seed: int) -> str:
+    """Deterministic 12-hex token: same campaign + seed -> same token."""
+    return sha256(f"{campaign_id}:{seed}".encode()).hexdigest()[:12]
+
+
 def user_prompt(
     mission_config: dict, profile: dict, pretext: str, tone: str, difficulty: str
 ) -> str:
@@ -171,6 +175,7 @@ def assemble_campaign(
     tone: str,
     difficulty: str,
     generated_at: datetime | None = None,
+    scheduled: tuple[str, str] | None = None,
     actual_model: dict | None = None,
     runtime: dict[str, str] | None = None,
 ) -> GeneratedCampaign:
@@ -180,12 +185,14 @@ def assemble_campaign(
 
     - **persona_identity** — the persona is bound once and stamped into every
       sender; the model never writes a sender field.
-    - **timing** — enforced at decode time by the query's ``EMAIL_TIME <
-      SMS_TIME`` constraint; re-checked here by the schema.
+    - **timing** — ``scheduled`` (or the decode-time ``EMAIL_TIME < SMS_TIME``
+      constraint) orders the messages; re-checked here by the schema.
     - **cross_channel_reference** — ``references`` is written by this function,
       so a cited id always exists.
     - **channel shaping** — email gets a subject; SMS gets none (this function
       never copies one).
+    - **determinism** — with fixed ``generated_at`` + ``scheduled``, the same
+      inputs produce byte-identical output (no uuid, no clock reads).
     """
     missing = [k for k in BINDING_KEYS if k not in bindings]
     if missing:
@@ -201,18 +208,20 @@ def assemble_campaign(
     }
     sender = {"display_name": persona["display_name"], "from_address": persona["email"]}
 
+    seed = mission_config["reproducibility"]["seed"]
     email_domain = profile["recipient"]["email"].rsplit("@", 1)[-1]
-    landing_url = f"https://sim.{email_domain}/t/{uuid4().hex[:12]}"
+    token = tracking_token(mission_config["campaign_id"], seed)
+    landing_url = f"https://sim.{email_domain}/t/{token}"
     cta_type, cta_label = CTA_BY_PRETEXT.get(pretext, ("click_link", "Open"))
     cta = {"type": cta_type, "landing_url": landing_url, "button_label": cta_label}
 
     model = actual_model or mission_config["model_policy"]["models"][0]
-    runtime_info = runtime or {"sdk": "lmql"}
-    seed = mission_config["reproducibility"]["seed"]
+    runtime_info = runtime or {"sdk": "google-adk"}
     prompt_hash = sha256(
         rendered_prompt(mission_config, profile, pretext, tone, difficulty).encode()
     ).hexdigest()
     now = (generated_at or datetime.now(timezone.utc)).isoformat().replace("+00:00", "Z")
+    email_at, sms_at = scheduled if scheduled else (b["EMAIL_TIME"], b["SMS_TIME"])
 
     def provenance(template_id: str, params: dict) -> dict:
         return {
@@ -228,7 +237,7 @@ def assemble_campaign(
         {
             "message_id": "msg-0001",  # sequential, by construction
             "channel": "email",
-            "scheduled_at": b["EMAIL_TIME"],
+            "scheduled_at": email_at,
             "sender": sender,
             "subject": b["EMAIL_SUBJECT"],  # email only, by construction
             "body": b["EMAIL_BODY"],
@@ -242,7 +251,7 @@ def assemble_campaign(
         {
             "message_id": "msg-0002",  # by construction
             "channel": "sms",
-            "scheduled_at": b["SMS_TIME"],
+            "scheduled_at": sms_at,
             "sender": sender,  # identical persona, by construction
             "body": b["SMS_BODY"],  # no subject, by construction
             "call_to_action": cta,

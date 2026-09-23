@@ -20,12 +20,13 @@ from email.message import EmailMessage
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ORG_FILE = REPO_ROOT / "org" / "fantazylabz_org.json"
 
 
 def _default_to() -> str:
-    org = json.loads(ORG_FILE.read_text(encoding="utf-8"))
-    return next(e for e in org["employees"] if e["level"] != 1)["email"]
+    from generator_agent.catalog import load_catalog
+
+    internal = [p for p in load_catalog() if p["class"] == "internal"]
+    return next(p for p in internal if p["level"] != 1)["email"]
 
 
 def build_email(msg: dict, to_addr: str) -> EmailMessage:

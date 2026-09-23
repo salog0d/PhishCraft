@@ -20,7 +20,6 @@ import json
 import os
 from datetime import datetime, timezone
 from hashlib import sha256
-from uuid import uuid4
 
 import lmql
 
@@ -116,7 +115,8 @@ def generator_ag(
 ) -> GeneratedCampaign:
     recipient = profile["recipient"]
     email_domain = recipient["email"].rsplit("@", 1)[-1]
-    landing_url = f"https://sim.{email_domain}/t/{uuid4().hex[:12]}"
+    seed = mission_config["reproducibility"]["seed"]
+    landing_url = f"https://sim.{email_domain}/t/{tracking_token(mission_config['campaign_id'], seed)}"
     cta_type, cta_label = CTA_BY_PRETEXT.get(pretext, ("click_link", "Open"))
     '''lmql
     argmax

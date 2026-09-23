@@ -19,12 +19,15 @@
 
 **Key features**
 
-- **Generation pipeline** — Orchestrator, Recon, Profiler, Generator, and Validator stages, each with a single responsibility.
+- **ADK pipeline** — a Google ADK `SequentialAgent` running three stages:
+  an `LlmAgent` content step, a deterministic assembler, and a deterministic
+  validator (generate → assemble → verify, one-way).
 - **Two channels** — email and SMS (voice is out of scope).
 - **Multi-model adapters** — generate through at least two model families so results are comparable and reproducible across families.
-- **Coherence validators** — a consistent impersonated persona, a coherent send timeline, and existing cross-channel references, all enforced in the schema.
+- **Coherence validators** — a consistent impersonated persona, a coherent send timeline, existing cross-channel references, and link consistency (body links must match the CTA), all enforced in the schema and reported by a deterministic validator.
 - **Provenance log** — model, parameters, seed, and prompt hash recorded for every artifact.
-- **Synthetic-only data** — target catalogs and recipient profiles are generated internally; no external OSINT tools or live collection.
+- **Synthetic-only data** — the persona catalog (12 internal + 2 external personas) is generated internally; no external OSINT tools or live collection.
+- **Reproducibility & reliability measurement** — a harness that reruns the same spec with a fixed seed and counts constraint violations across a 10-spec baseline.
 - **Built-in authorization gate** — every campaign must be attested as authorized before generation runs.
 
 ---
@@ -33,7 +36,7 @@
 
 ### Prerequisites
 
-- **Python** 3.14+
+- **Python** 3.12+
 - **pip** 24+ (and optionally a virtual environment)
 - **Graphviz** (only for regenerating architecture diagrams): `apt-get install graphviz` (Linux) / `brew install graphviz` (macOS)
 
@@ -65,30 +68,23 @@ Verify the installation:
 
 ## Quick Start
 
-Run a full simulation pipeline against a synthetic dataset from the CLI:
+Run the ADK pipeline against a synthetic persona from the CLI:
 
 ```bash
-# Initialize a workspace and a sample config
-[cli-name] init ./my-campaign
-
-# Generate synthetic targets/domains (no external data is collected)
-[cli-name] recon --region latam --sector finance --count 50 --output targets.json
-
-# Build synthetic recipient profiles from the targets
-[cli-name] profile --input targets.json --output profiles.json
-
-# Generate a campaign across email + SMS (authorization is required)
-[cli-name] generate \
-    --profiles profiles.json \
-    --channels email,sms \
+# Generate a campaign across email + SMS through the ADK pipeline
+# (model from env: ADK_MODEL=deepseek/deepseek-chat uses DEEPSEEK_API_KEY,
+#  default gemini-2.5-flash uses GOOGLE_API_KEY)
+python -m generator_agent.run \
     --pretext executive_request \
     --difficulty medium \
-    --model anthropic:claude-opus-5 --model openai:gpt-4.1 \
-    --seed 42 \
-    --authorized
+    --seed 42
+# → data/q3-awareness-2026/generated_campaign.json
+# → data/q3-awareness-2026/coherence_report.json
 
-# Verify coherence and write the provenance log
-[cli-name] validate --campaign campaign.json
+# Measure reproducibility (same spec twice) and reliability (10 specs)
+python -m measurement.reproduce   --adapter adk --spec-id S1 --runs 2
+python -m measurement.reliability --adapter adk --runs 1
+# → data/measurements/.../reproducibility.json + reliability.json + summary.md
 ```
 
 Prefer the HTTP service? The same engine is exposed as an API:
@@ -142,13 +138,10 @@ reproducibility:
   seed: 42
 model_policy:
   models:
+    - { family: deepseek, name: deepseek-chat }
     - { family: anthropic, name: claude-opus-5 }
-    - { family: openai, name: gpt-4.1 }
-stages:
-  recon:
-    synthetic_count: 50
-  profiler:
-    profiles_per_target: 5
+measurement:
+  baseline_specs: 10
 ```
 
 ---

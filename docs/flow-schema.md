@@ -1,9 +1,9 @@
 # Flow Schema — JSON Contracts
 
-JSON data contracts for the **campaign generator**. Each hand-off between stages
-(Phases 0–4) is a versioned contract with a concrete synthetic example. The
-generator covers **email and SMS**; it produces content and verifies coherence,
-and does **not** track victim interaction or campaign KPIs.
+JSON data contracts for the **campaign generator**. Each hand-off of the
+three-stage ADK pipeline is a versioned contract with a concrete synthetic
+example. The generator covers **email and SMS**; it produces content and
+verifies coherence, and does **not** track victim interaction or campaign KPIs.
 
 > **Scope.** All data is **synthetic and generated internally**. Every payload
 > carries the campaign authorization attestation; downstream stages must reject
@@ -19,8 +19,8 @@ and does **not** track victim interaction or campaign KPIs.
   `payload`.
 - **Timestamps.** ISO 8601, UTC, `Z` suffix (e.g. `2026-08-20T09:00:00Z`).
 - **Identifiers.** `campaign_id` is a caller-supplied slug
-  (`^[A-Za-z0-9._-]{1,64}$`); others are prefixed (`tgt-`, `prf-`, `tpl-`,
-  `ast-`, `msg-`, `bat-`) or UUIDv4 (`generation_id`).
+  (`^[A-Za-z0-9._-]{1,64}$`); others are prefixed (`tpl-`, `msg-`, `bat-`) or
+  UUIDv4 (`generation_id`).
 - **Versioning.** `schema_version` uses SemVer; this document describes `1.0`.
 - **Enums** mirror `app/core/schemas.py`: `channel` ∈ {`email`, `sms`},
   `pretext`, `call_to_action.type`, `tone`, `difficulty`, `model.family`.
@@ -30,18 +30,14 @@ and does **not** track victim interaction or campaign KPIs.
 | # | Contract | Producer | Consumer | Phase |
 |---|----------|----------|----------|-------|
 | — | `MessageEnvelope` | any stage | any stage | all |
-| 1 | `MissionConfig` | Orchestrator-AG | pipeline | 0 |
-| 2 | `SyntheticTargetSet` | Recon-AG | Profiler-AG | 1 |
-| 3 | `ProfileDataset` | Profiler-AG | Generator-AG | 2 |
-| 4 | `TemplateSet` | Profiler-AG | Generator-AG | 2 |
-| 5 | `PayloadAssets` | Profiler-AG | Generator-AG | 2 |
-| 6 | `PhishingGenerationRequest` | Orchestrator-AG | Generator-AG | 3 |
-| 6b | `PhishingGenerationResponse` | Generator-AG | Orchestrator-AG | 3 |
-| 7 | `GeneratedMessage` | Generator-AG | Validator-AG | 3 |
-| 8 | `DeploymentManifest` | Orchestrator-AG | Generator-AG | 3 |
-| 9 | `GeneratedCampaign` | Validator-AG | store | 4 |
-| 10 | `CoherenceReport` | Validator-AG | store | 4 |
-| 11 | `ProvenanceLog` | Validator-AG | store | 4 |
+| 1 | `MissionConfig` | config file | pipeline | 0 |
+| 2 | `PhishingGenerationRequest` | Orchestrator | Generator | 1 |
+| 2b | `PhishingGenerationResponse` | Generator | Orchestrator | 1 |
+| 3 | `GeneratedMessage` | Generator | Validator | 1 |
+| 4 | `DeploymentManifest` | Orchestrator | Generator | 1 |
+| 5 | `GeneratedCampaign` | assembler | store / Validator | 1–2 |
+| 6 | `CoherenceReport` | Validator | store / harness | 2 |
+| 7 | `ProvenanceLog` | Validator | store | 2 |
 
 ---
 
@@ -55,26 +51,27 @@ Common wrapper for every message on the stage bus.
   "schema_version": "1.0",
   "campaign_id": "q3-awareness-2026",
   "phase": 1,
-  "from_agent": "Recon-AG",
-  "to_agent": "Profiler-AG",
+  "from_agent": "Generator-AG",
+  "to_agent": "Validator-AG",
   "emitted_at": "2026-08-19T14:30:00Z",
   "authorized": true,
-  "payload": { "contract": "SyntheticTargetSet", "...": "..." }
+  "payload": { "contract": "GeneratedCampaign", "...": "..." }
 }
 ```
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `phase` | integer 0–4 | Pipeline phase that emitted the message. |
-| `from_agent` / `to_agent` | enum | `Orchestrator-AG`, `Recon-AG`, `Profiler-AG`, `Generator-AG`, `Validator-AG`; must differ. |
+| `phase` | integer 0–2 | Pipeline phase that emitted the message (0 config, 1 generation, 2 verification). |
+| `from_agent` / `to_agent` | enum | `Orchestrator-AG`, `Generator-AG`, `Validator-AG`; must differ. |
 | `authorized` | boolean | Propagated attestation; must be `true`. |
 
 ---
 
-## 1 · MissionConfig — Phase 0 (Orchestrator-AG)
+## 1 · MissionConfig — Phase 0 (config file)
 
 Defines scope, constraints, the model policy (≥ 2 families), reproducibility,
-and ethics guardrails.
+and ethics guardrails. Loaded from `config/*.mission.json`, never decided by a
+model.
 
 ```json
 {
@@ -82,7 +79,7 @@ and ethics guardrails.
   "campaign_id": "q3-awareness-2026",
   "authorized": true,
   "objective": "security-awareness-training",
-  "scope": { "region": "LATAM", "sector": "finance"},
+  "scope": { "region": "LATAM", "sector": "technology", "volume": 5, "duration_days": 14 },
   "constraints": {
     "synthetic_data_only": true,
     "channels": ["email", "sms"],
@@ -90,11 +87,12 @@ and ethics guardrails.
   },
   "model_policy": {
     "models": [
-      { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
-      { "family": "openai", "name": "gpt-4.1", "adapter_version": "1.0" }
+      { "family": "deepseek", "name": "deepseek-chat", "adapter_version": "1.0" },
+      { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" }
     ]
   },
-  "ethics": {  "isolated_environment": true }
+  "reproducibility": { "seed": 42, "deterministic": true },
+  "ethics": { "consent_reference": "IRB-2026-014", "isolated_environment": true }
 }
 ```
 
@@ -102,136 +100,11 @@ and ethics guardrails.
 |-------|------|-------|
 | `constraints.channels` | enum[] | Subset of `email`, `sms` (unique). |
 | `model_policy.models` | ModelSpec[] | ≥ 2 entries spanning **≥ 2 distinct families**. |
+| `reproducibility.seed` | integer ≥ 0 | Fixed seed; drives the deterministic tracking token. |
 
 ---
 
-## 2 · SyntheticTargetSet — Phase 1 (Recon-AG → Profiler-AG)
-
-Programmatically generated targets and simulated attack surfaces. No external
-scanning.
-
-```json
-{
-  "contract": "SyntheticTargetSet",
-  "campaign_id": "q3-awareness-2026",
-  "source": "synthetic",
-  "target_count": 1,
-  "targets": [
-    {
-      "target_id": "tgt-0001",
-      "synthetic_domain": "fantazylabz.tech",
-      "domain_pattern": "typosquat",
-      "attack_surfaces": [
-        { "type": "mail_server", "value": "mx.fantazylabz.tech" },
-        { "type": "login_form", "value": "https://fantazylabz.tech/login" }
-      ]
-    }
-  ]
-}
-```
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `source` | const `"synthetic"` | Guards against real collection. |
-| `domain_pattern` | enum | `typosquat` \| `homoglyph` \| `subdomain` \| `combosquat`. |
-| `attack_surfaces[].type` | enum | `mail_server` \| `login_form` \| `api` \| `portal`. |
-
----
-
-## 3 · ProfileDataset — Phase 2 (Profiler-AG → Generator-AG)
-
-Labeled synthetic recipient profiles. `recipient` matches the `Recipient` model.
-
-```json
-{
-  "contract": "ProfileDataset",
-  "campaign_id": "q3-awareness-2026",
-  "source": "synthetic",
-  "format": "json",
-  "record_count": 1,
-  "profiles": [
-    {
-      "profile_id": "prf-0001",
-      "target_id": "tgt-0001",
-      "recipient": {
-        "email": "rebecca.stern@fantazylabz.tech",
-        "full_name": "Rebecca Stern",
-        "role": "Staff Accountant",
-        "department": "Finance"
-      },
-      "attributes": {
-        "seniority": "mid",
-        "devices": ["windows", "ios"],
-        "language": "en",
-        "language_patterns": ["formal"]
-      },
-      "labels": { "segment": "finance", "risk_tier": "medium" }
-    }
-  ]
-}
-```
-
----
-
-## 4 · TemplateSet — Phase 2 (Profiler-AG → Generator-AG)
-
-Seed **prompt templates** the generator conditions on. `pretext`, `tone`,
-`difficulty` use the shared enums; email templates require a `subject`.
-
-```json
-{
-  "contract": "TemplateSet",
-  "campaign_id": "q3-awareness-2026",
-  "templates": [
-    {
-      "template_id": "tpl-0001",
-      "channel": "email",
-      "pretext": "executive_request",
-      "tone": "authoritative",
-      "difficulty": "medium",
-      "language": "en",
-      "subject": "Quick approval needed before EOD",
-      "body": "Hi {{full_name}}, can you approve this today? {{link}}",
-      "variables": ["full_name", "link"],
-      "ab_variant": "A"
-    }
-  ]
-}
-```
-
----
-
-## 5 · PayloadAssets — Phase 2 (Profiler-AG → Generator-AG)
-
-Simulation assets (tracking links, sandboxed attachments, mirror pages). All
-assets are marked `simulated`.
-
-```json
-{
-  "contract": "PayloadAssets",
-  "campaign_id": "q3-awareness-2026",
-  "assets": [
-    {
-      "asset_id": "ast-0001",
-      "type": "tracking_link",
-      "landing_url": "https://sim.fantazylabz.tech/t/abc123",
-      "tracking_token": "abc123",
-      "linked_template_id": "tpl-0001",
-      "simulated": true
-    }
-  ]
-}
-```
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `type` | enum | `tracking_link` \| `attachment` \| `mirror_page`. |
-| `content_ref` | URI | `sandbox://` reference (attachments/mirror pages). |
-| `simulated` | const `true` | Assets are inert simulation artifacts. |
-
----
-
-## 6 · PhishingGenerationRequest — Phase 3 (Orchestrator-AG → Generator-AG)
+## 2 · PhishingGenerationRequest — Phase 1 (Orchestrator → Generator)
 
 > **Canonical contract** — validated by
 > `app/core/schemas.py::PhishingGenerationRequest`. `authorized` must be `true`
@@ -256,11 +129,11 @@ assets are marked `simulated`.
   "pretext": "executive_request",
   "call_to_action": {
     "type": "click_link",
-    "landing_url": "https://sim.fantazylabz.tech/t/abc123",
+    "landing_url": "https://sim.fantazylabz.tech/t/8b9dc310f705",
     "button_label": "Review Document"
   },
-  "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
-  "params": { "temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
+  "model": { "family": "deepseek", "name": "deepseek-chat", "adapter_version": "1.0" },
+  "params": { "temperature": 0.0, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
   "tone": "authoritative",
   "difficulty": "medium",
   "language": "en",
@@ -272,13 +145,13 @@ assets are marked `simulated`.
 | Field | Type | Constraint |
 |-------|------|------------|
 | `channel` | enum | `email` \| `sms` (default `email`). |
-| `model.family` | enum | `anthropic`, `openai`, `mistral`, `llama`, `local`. |
+| `model.family` | enum | `anthropic`, `openai`, `mistral`, `llama`, `local`, `deepseek`. |
 | `params.seed` | integer ≥ 0 | **Required** — makes the generation reproducible. |
 | `pretext` | enum | `password_reset`, `invoice_payment`, `package_delivery`, `it_support`, `hr_notice`, `executive_request`, `shared_document`, `account_suspension`. |
 | `call_to_action.type` | enum | `click_link`, `enter_credentials`, `open_attachment`, `reply`. |
 | `subject_hint` / `include_tracking_pixel` | — | **Email only**; must be unset/`false` for SMS. |
 
-### 6b · PhishingGenerationResponse
+### 2b · PhishingGenerationResponse
 
 ```json
 {
@@ -292,7 +165,7 @@ assets are marked `simulated`.
 
 ---
 
-## 7 · GeneratedMessage — Phase 3 (Generator-AG → Validator-AG)
+## 3 · GeneratedMessage — Phase 1 (Generator → Validator)
 
 One generated message with its provenance. Email requires a `subject`; SMS must
 not carry one (and is capped at 1600 characters).
@@ -306,16 +179,16 @@ not carry one (and is capped at 1600 characters).
   "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech" },
   "subject": "Quick approval needed before EOD",
   "body": "Rebecca, please review and approve the attached before end of day.",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/abc123" },
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/8b9dc310f705" },
   "references": [],
   "provenance": {
-    "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
-    "params": { "temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
+    "model": { "family": "deepseek", "name": "deepseek-chat", "adapter_version": "1.0" },
+    "params": { "temperature": 0.0, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
     "prompt_template_id": "tpl-0001",
     "prompt_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "generated_at": "2026-08-20T09:00:00Z",
     "adapter_latency_ms": 812,
-    "runtime": { "sdk": "0.40.0" }
+    "runtime": { "sdk": "google-adk" }
   }
 }
 ```
@@ -327,7 +200,7 @@ not carry one (and is capped at 1600 characters).
 
 ---
 
-## 8 · DeploymentManifest — Phase 3 (Orchestrator-AG → Generator-AG)
+## 4 · DeploymentManifest — Phase 1 (Orchestrator → Generator)
 
 Batches of per-recipient generation requests with a send schedule.
 
@@ -349,10 +222,11 @@ Batches of per-recipient generation requests with a send schedule.
 
 ---
 
-## 9 · GeneratedCampaign — Phase 4 (Validator-AG)
+## 5 · GeneratedCampaign — Phase 1–2 (assembler → Validator)
 
-A coherent multi-channel bundle for one impersonated persona. Enforces the three
-coherence rules.
+A coherent multi-channel bundle for one impersonated persona. The assembler
+decides every structural field (ids, persona, seed-derived URL, schedule,
+references, provenance); the LLM only wrote the `subject`/`body` text.
 
 ```json
 {
@@ -361,17 +235,16 @@ coherence rules.
   "persona": {
     "display_name": "Elena Marchetti",
     "email": "ceo@fantazylabz.tech",
-    "role": "CEO",
-    "organization": "Fantazy Labz"
+    "role": "Chief Executive Officer"
   },
   "messages": [
     { "message_id": "msg-0001", "channel": "email", "scheduled_at": "2026-08-20T09:00:00Z", "...": "..." },
-    { "message_id": "msg-0002", "channel": "sms", "scheduled_at": "2026-08-20T10:00:00Z", "references": ["msg-0001"], "...": "..." }
+    { "message_id": "msg-0002", "channel": "sms", "scheduled_at": "2026-08-20T10:15:00Z", "references": ["msg-0001"], "...": "..." }
   ]
 }
 ```
 
-**Coherence rules (all enforced in code):**
+**Coherence rules (all enforced in code, reported by the validator):**
 
 - **Persona identity** — every message's `sender.display_name` and
   `sender.from_address` must equal the campaign `persona` (the CEO is the same
@@ -379,10 +252,16 @@ coherence rules.
 - **Cross-channel reference existence** — every id in `references` must exist in
   the bundle; a message may not reference itself.
 - **Timing** — a message may not be scheduled before any message it references.
+- **Link consistency** — every link-like token in a message `body` must match
+  that message's `call_to_action.landing_url` (or the landing URL of a message
+  it references), and a follow-up must carry the same tracking token as the
+  message it cites. This is the check that catches the known cross-channel
+  failure in the committed sample (`msg-0002` body token `abc123` ≠ CTA token
+  `d6db8064874a`).
 
 ---
 
-## 10 · CoherenceReport — Phase 4 (Validator-AG)
+## 6 · CoherenceReport — Phase 2 (Validator → store / harness)
 
 The recorded outcome of the coherence checks — the evidence that the generator
 satisfied its constraints.
@@ -394,18 +273,22 @@ satisfied its constraints.
   "results": [
     { "check": "persona_identity", "passed": true },
     { "check": "timing", "passed": true },
-    { "check": "cross_channel_reference", "passed": true }
+    { "check": "cross_channel_reference", "passed": true },
+    { "check": "link_consistency", "passed": false,
+      "detail": "msg-0002 body token 'abc123' not in CTA tokens (d6db8064874a)" }
   ],
-  "all_passed": true
+  "all_passed": false
 }
 ```
 
 `results` must cover every check exactly once, and `all_passed` must equal the
-conjunction of the individual results.
+conjunction of the individual results. The validator
+(`validator_agent/validate.py`) is deterministic Python — it always emits a
+report, never raises on incoherent content.
 
 ---
 
-## 11 · ProvenanceLog — Phase 4 (Validator-AG)
+## 7 · ProvenanceLog — Phase 2 (Validator → store)
 
 Append-only reproducibility record: one `GenerationProvenance` entry per
 generated message.
@@ -416,8 +299,8 @@ generated message.
   "campaign_id": "q3-awareness-2026",
   "entries": [
     {
-      "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
-      "params": { "temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
+      "model": { "family": "deepseek", "name": "deepseek-chat", "adapter_version": "1.0" },
+      "params": { "temperature": 0.0, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
       "prompt_template_id": "tpl-0001",
       "prompt_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "generated_at": "2026-08-20T09:00:00Z"
@@ -439,20 +322,19 @@ Enforced by Pydantic v2 models in
 - **Authorization is mandatory.** `MissionConfig`, `DeploymentManifest`, and the
   `MessageEnvelope` reject any payload where `authorized` is not `true`.
 - **Synthetic-only.** `MissionConstraints.synthetic_data_only` must be `true`;
-  `SyntheticTargetSet` and `ProfileDataset` require `source == "synthetic"`.
+  all personas/recipients are synthetic (external personas use `.example`).
 - **Isolated environment.** `MissionEthics.isolated_environment` must be `true`.
 - **Two model families.** `ModelPolicy` requires ≥ 2 entries spanning ≥ 2
   distinct `family` values.
-- **Reproducibility.** `GenerationParams.seed` is required.
+- **Reproducibility.** `GenerationParams.seed` is required; the tracking URL
+  token is `sha256(campaign_id:seed)[:12]`.
 - **Channel shaping.** `channels ⊆ {email, sms}`; email requires a `subject`,
   SMS forbids one; `subject_hint`/`include_tracking_pixel` are email-only.
-- **Coherence.** `GeneratedCampaign` enforces persona identity, cross-channel
-  reference existence, and timing; `CoherenceReport` must be internally
-  consistent.
-- **Referential integrity.** Prefix-typed ids (`tgt-`, `prf-`, `tpl-`, `ast-`,
-  `msg-`, `bat-`) are unique within a collection; `target_count` / `record_count`
-  equal their array lengths.
-- **Assets are inert.** Every `PayloadAsset.simulated` must be `true`.
+- **Coherence.** The validator enforces persona identity, cross-channel
+  reference existence, timing, and link consistency; `CoherenceReport` must be
+  internally consistent.
+- **Referential integrity.** Prefixed ids (`msg-`, `bat-`) are unique within a
+  collection.
 
 ### Persistence rules
 
@@ -463,10 +345,6 @@ All artifacts are **append-only (immutable)** and **encrypted at rest**.
 |----------|-------|------------------|-----------|
 | `MessageEnvelope` | `bus-audit-log` | 90 | none |
 | `MissionConfig` | `campaign-configs` | 365 | none |
-| `SyntheticTargetSet` | `synthetic-datasets` | 180 | synthetic |
-| `ProfileDataset` | `synthetic-datasets` | 180 | synthetic |
-| `TemplateSet` | `campaign-content` | 365 | none |
-| `PayloadAssets` | `sandbox-assets` | 90 | none |
 | `DeploymentManifest` | `campaign-schedules` | 365 | synthetic |
 | `GeneratedCampaign` | `generated-campaigns` | 365 | synthetic |
 | `CoherenceReport` | `coherence-reports` | 365 | none |
@@ -477,14 +355,16 @@ All artifacts are **append-only (immutable)** and **encrypted at rest**.
 ## End-to-end flow
 
 ```
-MissionConfig ─▶ SyntheticTargetSet ─▶ ProfileDataset ─┬▶ TemplateSet ──┐
-                (Profiler-AG)                          └▶ PayloadAssets ┘
-                                                                        ▼
-                              PhishingGenerationRequest ─▶ GeneratedMessage (per channel)
-                                        (Generator-AG, via ModelSpec adapter + provenance)
-                                                                        ▼
-                              GeneratedCampaign ─▶ CoherenceReport + ProvenanceLog
-                                        (Validator-AG — one-way verify, no feedback loop)
+MissionConfig (config file) ─┬▶ generator_content_agent (LlmAgent)
+CampaignSpec + PersonaCatalog┘        │ raw_bindings
+                                      ▼
+                              assembler_agent (deterministic)
+                                      │ GeneratedCampaign
+                                      ▼
+                              validator_agent (deterministic)
+                                      │ CoherenceReport + ProvenanceLog
+                                      ▼
+                              measurement harness (reproducibility + reliability)
 ```
 
 See [architecture.md](./architecture.md) for the stage roles and phase

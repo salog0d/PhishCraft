@@ -1,0 +1,22 @@
+{
+  "personas": [
+    {
+      "persona_id": "ext-supplier-01",
+      "class": "external",
+      "org_type": "supplier",
+      "display_name": "Northwind Supplies — Accounts Payable",
+      "email": "ap@northwind-supplies.example",
+      "brand": "Northwind Supplies",
+      "supports_pretexts": ["invoice_payment", "shared_document"]
+    },
+    {
+      "persona_id": "ext-bank-01",
+      "class": "external",
+      "org_type": "bank",
+      "display_name": "Meridian Bank — Security Alerts",
+      "email": "alerts@meridianbank.example",
+      "brand": "Meridian Bank",
+      "supports_pretexts": ["account_suspension", "password_reset"]
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "adapter": "adk",
+  "model": "deepseek-chat",
+  "n_specs": 10,
+  "n_runs": 10,
+  "n_generation_errors": 0,
+  "n_campaigns_with_violation": 10,
+  "failure_rate": 1.0,
+  "violation_counts": {
+    "persona_identity": 0,
+    "timing": 0,
+    "cross_channel_reference": 0,
+    "link_consistency": 10
+  },
+  "per_spec": [
+    {
+      "spec_id": "S1",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "caa1983f1d4ab1b5f953cf4137d5e4d4f0e49c6a9b15f5a0ee589df9c16b4788",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 5343
+    },
+    {
+      "spec_id": "S2",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "caa1983f1d4ab1b5f953cf4137d5e4d4f0e49c6a9b15f5a0ee589df9c16b4788",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 1498
+    },
+    {
+      "spec_id": "S3",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "2c79eafe4ab80bfaa355b3f1a7c8d5170a846e0c63f61ae43fa6b8144a372058",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 1550
+    },
+    {
+      "spec_id": "S4",
+      "run": 1,
+      "seed": 7,
+      "status": "ok",
+      "campaign_hash": "371df7577e4f730613ffc834e4a52ebc9e86107d3a9a4a4a6c94e37e00aab648",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 2142
+    },
+    {
+      "spec_id": "S5",
+      "run": 1,
+      "seed": 13,
+      "status": "ok",
+      "campaign_hash": "e6b9ac37c7c70c55164b87735b89fef8c9739dd6ce6bf0ff7db2fb217912b561",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 2388
+    },
+    {
+      "spec_id": "S6",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "0996d7e6147f3e108fefeec0352c6b1209811660e2d4fc57629bb9fbeb11679b",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 1521
+    },
+    {
+      "spec_id": "S7",
+      "run": 1,
+      "seed": 99,
+      "status": "ok",
+      "campaign_hash": "1ffc1173f33b83116ad4989eb653eec48f6eb68112ba0cf7aab272041b902975",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 1902
+    },
+    {
+      "spec_id": "S8",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "12608d97d7615d3e77fdceb1500d52b07db7a7be5d0ca355448bc3260840e050",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 1971
+    },
+    {
+      "spec_id": "S9",
+      "run": 1,
+      "seed": 5,
+      "status": "ok",
+      "campaign_hash": "b52baf7c5d84dfef75e41dddf9508742d863fb60a7e0d0b42c2d92abc28fbf18",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 2076
+    },
+    {
+      "spec_id": "S10",
+      "run": 1,
+      "seed": 42,
+      "status": "ok",
+      "campaign_hash": "88fa3175df918b95578761f3a5f2f118e727fec5a7993ff89e868c8624aa1235",
+      "failing_checks": [
+        "link_consistency"
+      ],
+      "error": null,
+      "duration_ms": 1598
+    }
+  ]
+}

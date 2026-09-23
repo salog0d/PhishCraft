@@ -87,3 +87,33 @@ def test_missing_bindings_are_rejected():
 
 def test_bindings_contract_lists_all_eight_variables():
     assert set(BINDING_KEYS) == set(BINDINGS)
+
+
+def test_assembly_is_deterministic_with_fixed_clock_and_schedule():
+    """Same inputs + fixed clock/schedule -> byte-identical output (W1)."""
+    from datetime import datetime, timezone
+
+    fixed = datetime(2026, 8, 20, 9, 0, tzinfo=timezone.utc)
+    schedule = ("2026-08-20T09:00:00Z", "2026-08-20T10:15:00Z")
+    first = assemble_campaign(
+        BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
+        generated_at=fixed, scheduled=schedule,
+    )
+    second = assemble_campaign(
+        BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
+        generated_at=fixed, scheduled=schedule,
+    )
+    assert first.model_dump() == second.model_dump()
+
+
+def test_tracking_token_is_seed_derived_not_random():
+    """The landing URL token must come from the seed, not uuid4 (W1)."""
+    from generator_agent.assemble import tracking_token
+
+    assert tracking_token("q3-awareness-2026", 42) == \
+        tracking_token("q3-awareness-2026", 42)
+    assert tracking_token("q3-awareness-2026", 42) != \
+        tracking_token("q3-awareness-2026", 43)
+    for message in CAMPAIGN.messages:
+        url = str(message.call_to_action.landing_url)
+        assert url.endswith("/t/" + tracking_token("q3-awareness-2026", 42))

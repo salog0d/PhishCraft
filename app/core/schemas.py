@@ -19,8 +19,10 @@ This module is the single source of truth for the system's data contracts:
   families** so results are comparable and reproducible across families.
 * The **coherence contracts** (``GeneratedCampaign`` / ``CoherenceReport``) that
   enforce, across a multi-message campaign, a consistent impersonated persona
-  ("the CEO is the same everywhere"), a coherent send timeline, and the
-  existence of every cross-channel reference.
+  ("the CEO is the same everywhere"), a coherent send timeline, the existence
+  of every cross-channel reference, and link consistency (every URL written
+  into a message body must match the CTA link; a follow-up points at the same
+  link it cites).
 * The **provenance contracts** (``GenerationProvenance`` / ``ProvenanceLog``)
   that record which model, prompt, parameters, and seed produced each artifact,
   making every generation reproducible.
@@ -180,15 +182,10 @@ class GenerationParams(BaseModel):
 # =========================================================================== #
 
 CampaignId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,64}$")]
-TargetId = Annotated[str, StringConstraints(pattern=r"^tgt-\d{4,}$")]
-ProfileId = Annotated[str, StringConstraints(pattern=r"^prf-\d{4,}$")]
 TemplateId = Annotated[str, StringConstraints(pattern=r"^tpl-\d{4,}$")]
-AssetId = Annotated[str, StringConstraints(pattern=r"^ast-\d{4,}$")]
 MessageId = Annotated[str, StringConstraints(pattern=r"^msg-\d{4,}$")]
 BatchId = Annotated[str, StringConstraints(pattern=r"^bat-\d{2,}$")]
-Locale = Annotated[str, StringConstraints(pattern=r"^[a-z]{2}(-[A-Z]{2})?$")]
 Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
-SandboxRef = Annotated[str, StringConstraints(pattern=r"^sandbox://[\w./-]+$")]
 
 
 def _require_unique(ids: list[str], label: str) -> None:
@@ -437,6 +434,7 @@ class CoherenceCheck(str, Enum):
     PERSONA_IDENTITY = "persona_identity"
     TIMING = "timing"
     CROSS_CHANNEL_REFERENCE = "cross_channel_reference"
+    LINK_CONSISTENCY = "link_consistency"
 
 
 class CoherenceCheckResult(BaseModel):
@@ -449,12 +447,17 @@ class CoherenceReport(BaseModel):
     """The recorded outcome of validating a ``GeneratedCampaign``.
 
     This is the evidence artifact for 'the generator satisfies its
-    constraints' -- the project's reproducible result, not a victim metric."""
+    constraints' -- the project's reproducible result, not a victim metric.
+
+    Covers the four coherence checks: persona identity, send timing,
+    cross-channel reference existence, and cross-channel link consistency
+    (every URL written into a message body must match the CTA link, and a
+    follow-up must point at the same link it cites)."""
 
     PERSISTENCE: ClassVar["PersistencePolicy"]
 
     campaign_id: CampaignId
-    results: list[CoherenceCheckResult] = Field(..., min_length=3)
+    results: list[CoherenceCheckResult] = Field(..., min_length=4)
     all_passed: bool
 
     @model_validator(mode="after")
@@ -475,12 +478,13 @@ class CoherenceReport(BaseModel):
 
 
 class Agent(str, Enum):
-    """Generator-centric stages (no attack-execution or monitoring agents)."""
+    """Generator-centric stages (no attack-execution or monitoring agents).
+
+    The Orchestrator is the ADK SequentialAgent itself; Generator and
+    Validator are the two surviving pipeline stages."""
 
     ORCHESTRATOR = "Orchestrator-AG"
-    RECON = "Recon-AG"            # synthetic targets/domains (SyntheticTargetSet)
-    PROFILER = "Profiler-AG"      # synthetic recipient profiles (ProfileDataset)
-    GENERATOR = "Generator-AG"    # LLM generation via model-family adapters
+    GENERATOR = "Generator-AG"    # LLM content + deterministic assembly
     VALIDATOR = "Validator-AG"    # coherence checks + provenance recording
 
 
@@ -531,7 +535,7 @@ class MessageEnvelope(BaseModel):
     message_id: UUID = Field(default_factory=uuid4)
     schema_version: str = Field(default="1.0", pattern=r"^\d+\.\d+$")
     campaign_id: CampaignId
-    phase: int = Field(..., ge=0, le=4)
+    phase: int = Field(..., ge=0, le=2, description="0=config, 1=generation, 2=verification")
     from_agent: Agent
     to_agent: Agent
     emitted_at: datetime
@@ -645,191 +649,6 @@ class MissionConfig(BaseModel):
         if not value:
             raise ValueError("campaign must be attested as authorized")
         return value
-
-
-# --------------------------------------------------------------------------- #
-# Phase 1 -- SyntheticTargetSet (Profiler-AG)
-# --------------------------------------------------------------------------- #
-
-
-class DomainPattern(str, Enum):
-    TYPOSQUAT = "typosquat"
-    HOMOGLYPH = "homoglyph"
-    SUBDOMAIN = "subdomain"
-    COMBOSQUAT = "combosquat"
-
-
-class AttackSurfaceType(str, Enum):
-    MAIL_SERVER = "mail_server"
-    LOGIN_FORM = "login_form"
-    API = "api"
-    PORTAL = "portal"
-
-
-class AttackSurface(BaseModel):
-    type: AttackSurfaceType
-    value: str = Field(..., min_length=1, max_length=253)
-
-
-class SyntheticTarget(BaseModel):
-    target_id: TargetId
-    synthetic_domain: str = Field(..., min_length=1, max_length=253)
-    domain_pattern: DomainPattern
-    attack_surfaces: list[AttackSurface] = Field(..., min_length=1)
-
-
-class SyntheticTargetSet(BaseModel):
-    PERSISTENCE: ClassVar[PersistencePolicy] = PersistencePolicy(
-        store="synthetic-datasets", retention_days=180, pii=PiiClass.SYNTHETIC
-    )
-
-    campaign_id: CampaignId
-    source: str = Field(..., pattern=r"^synthetic$")
-    target_count: int = Field(..., ge=1)
-    targets: list[SyntheticTarget] = Field(..., min_length=1)
-
-    @model_validator(mode="after")
-    def _count_and_ids_consistent(self) -> "SyntheticTargetSet":
-        if self.target_count != len(self.targets):
-            raise ValueError("target_count must equal len(targets)")
-        _require_unique([t.target_id for t in self.targets], "target_id")
-        return self
-
-
-# --------------------------------------------------------------------------- #
-# Phase 1 -- ProfileDataset (Profiler-AG)
-# --------------------------------------------------------------------------- #
-
-
-class ProfileAttributes(BaseModel):
-    seniority: str = Field(..., max_length=40)
-    devices: list[str] = Field(default_factory=list)
-    language: Locale = "en"
-    language_patterns: list[str] = Field(default_factory=list)
-
-
-class SyntheticProfile(BaseModel):
-    profile_id: ProfileId
-    target_id: TargetId
-    recipient: Recipient
-    attributes: ProfileAttributes
-    labels: dict[str, str] = Field(default_factory=dict)
-
-
-class ProfileDataset(BaseModel):
-    PERSISTENCE: ClassVar[PersistencePolicy] = PersistencePolicy(
-        store="synthetic-datasets", retention_days=180, pii=PiiClass.SYNTHETIC
-    )
-
-    campaign_id: CampaignId
-    source: str = Field(..., pattern=r"^synthetic$")
-    format: str = Field(default="json", pattern=r"^(json|csv)$")
-    record_count: int = Field(..., ge=1)
-    profiles: list[SyntheticProfile] = Field(..., min_length=1)
-
-    @model_validator(mode="after")
-    def _count_and_ids_consistent(self) -> "ProfileDataset":
-        if self.record_count != len(self.profiles):
-            raise ValueError("record_count must equal len(profiles)")
-        _require_unique([p.profile_id for p in self.profiles], "profile_id")
-        return self
-
-
-# --------------------------------------------------------------------------- #
-# Phase 2 -- TemplateSet (prompt templates the generator conditions on)
-# --------------------------------------------------------------------------- #
-
-
-class Template(BaseModel):
-    """A seed/prompt template. ``prompt_template_id`` in provenance points here."""
-
-    template_id: TemplateId
-    channel: Channel
-    pretext: Pretext
-    tone: Tone = Tone.NEUTRAL
-    difficulty: Difficulty = Difficulty.MEDIUM
-    language: Locale = "en"
-    subject: Optional[str] = Field(default=None, max_length=200)
-    body: str = Field(..., min_length=1)
-    variables: list[str] = Field(default_factory=list)
-    ab_variant: str = Field(default="A", pattern=r"^[A-Z]$")
-
-    @model_validator(mode="after")
-    def _email_requires_subject(self) -> "Template":
-        if self.channel == Channel.EMAIL and not self.subject:
-            raise ValueError("email templates require a subject")
-        return self
-
-
-class TemplateSet(BaseModel):
-    PERSISTENCE: ClassVar[PersistencePolicy] = PersistencePolicy(
-        store="campaign-content", retention_days=365, pii=PiiClass.NONE
-    )
-
-    campaign_id: CampaignId
-    templates: list[Template] = Field(..., min_length=1)
-
-    @model_validator(mode="after")
-    def _template_ids_unique(self) -> "TemplateSet":
-        _require_unique([t.template_id for t in self.templates], "template_id")
-        return self
-
-
-# --------------------------------------------------------------------------- #
-# Phase 2 -- PayloadAssets (tracking links / sandboxed attachments)
-# --------------------------------------------------------------------------- #
-
-
-class AssetType(str, Enum):
-    TRACKING_LINK = "tracking_link"
-    ATTACHMENT = "attachment"
-    MIRROR_PAGE = "mirror_page"
-
-
-class PayloadAsset(BaseModel):
-    asset_id: AssetId
-    type: AssetType
-    simulated: bool
-    linked_template_id: Optional[TemplateId] = None
-    # tracking_link fields
-    landing_url: Optional[HttpUrl] = None
-    tracking_token: Optional[str] = Field(default=None, max_length=64)
-    # attachment / mirror_page fields
-    filename: Optional[str] = Field(default=None, max_length=200)
-    content_ref: Optional[SandboxRef] = None
-
-    @field_validator("simulated")
-    @classmethod
-    def _must_be_simulated(cls, value: bool) -> bool:
-        if not value:
-            raise ValueError("payload assets must be simulated")
-        return value
-
-    @model_validator(mode="after")
-    def _type_specific_fields_present(self) -> "PayloadAsset":
-        if self.type == AssetType.TRACKING_LINK:
-            if self.landing_url is None or not self.tracking_token:
-                raise ValueError(
-                    "tracking_link requires landing_url and tracking_token"
-                )
-        else:  # attachment or mirror_page must live in the sandbox
-            if self.content_ref is None:
-                raise ValueError(f"{self.type.value} requires a sandbox content_ref")
-        return self
-
-
-class PayloadAssets(BaseModel):
-    PERSISTENCE: ClassVar[PersistencePolicy] = PersistencePolicy(
-        store="sandbox-assets", retention_days=90, pii=PiiClass.NONE
-    )
-
-    campaign_id: CampaignId
-    assets: list[PayloadAsset] = Field(..., min_length=1)
-
-    @model_validator(mode="after")
-    def _asset_ids_unique(self) -> "PayloadAssets":
-        _require_unique([a.asset_id for a in self.assets], "asset_id")
-        return self
 
 
 # --------------------------------------------------------------------------- #

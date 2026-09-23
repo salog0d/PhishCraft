@@ -79,23 +79,6 @@ def _sms(msg_id="msg-0002", at="2026-08-20T10:00:00Z", refs=("msg-0001",), **ove
 # --------------------------------------------------------------------------- #
 
 
-def test_synthetic_target_set_accepts_documented_example():
-    target_set = fc.SyntheticTargetSet(
-        campaign_id="q3-awareness-2026",
-        source="synthetic",
-        target_count=1,
-        targets=[
-            {
-                "target_id": "tgt-0001",
-                "synthetic_domain": "examp1e-corp.com",
-                "domain_pattern": "typosquat",
-                "attack_surfaces": [{"type": "api", "value": "https://api"}],
-            }
-        ],
-    )
-    assert target_set.targets[0].target_id == "tgt-0001"
-
-
 def test_generated_campaign_accepts_coherent_email_then_sms():
     campaign = fc.GeneratedCampaign(
         campaign_id="q3-awareness-2026",
@@ -140,28 +123,6 @@ def test_mission_rejects_non_synthetic_data():
             channels=["email"],
             max_messages_per_persona=1,
         )
-
-
-def test_target_count_must_match_number_of_targets():
-    with pytest.raises(ValidationError):
-        fc.SyntheticTargetSet(
-            campaign_id="q3",
-            source="synthetic",
-            target_count=2,
-            targets=[
-                {
-                    "target_id": "tgt-0001",
-                    "synthetic_domain": "d",
-                    "domain_pattern": "typosquat",
-                    "attack_surfaces": [{"type": "api", "value": "x"}],
-                }
-            ],
-        )
-
-
-def test_tracking_link_requires_url_and_token():
-    with pytest.raises(ValidationError):
-        fc.PayloadAsset(asset_id="ast-0003", type="tracking_link", simulated=True)
 
 
 def test_envelope_rejects_self_addressed_message():
@@ -264,6 +225,7 @@ def test_coherence_report_all_passed_must_match_results():
         {"check": "persona_identity", "passed": True},
         {"check": "timing", "passed": True},
         {"check": "cross_channel_reference", "passed": False},
+        {"check": "link_consistency", "passed": True},
     ]
     with pytest.raises(ValidationError):
         fc.CoherenceReport(campaign_id="q3", results=results, all_passed=True)
@@ -277,8 +239,7 @@ def test_coherence_report_all_passed_must_match_results():
 @pytest.mark.parametrize(
     "contract",
     [
-        fc.MissionConfig, fc.SyntheticTargetSet, fc.ProfileDataset, fc.TemplateSet,
-        fc.PayloadAssets, fc.DeploymentManifest, fc.GeneratedCampaign,
+        fc.MissionConfig, fc.DeploymentManifest, fc.GeneratedCampaign,
         fc.CoherenceReport, fc.ProvenanceLog, fc.MessageEnvelope,
     ],
 )
@@ -289,7 +250,5 @@ def test_every_contract_declares_a_persistence_policy(contract):
     assert policy.immutable is True
 
 
-def test_synthetic_datasets_are_classified_synthetic():
-    assert fc.SyntheticTargetSet.PERSISTENCE.pii is fc.PiiClass.SYNTHETIC
-    assert fc.ProfileDataset.PERSISTENCE.pii is fc.PiiClass.SYNTHETIC
+def test_generated_campaigns_are_classified_synthetic():
     assert fc.GeneratedCampaign.PERSISTENCE.pii is fc.PiiClass.SYNTHETIC

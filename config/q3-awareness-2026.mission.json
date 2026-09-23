@@ -1,0 +1,24 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "authorized": true,
+  "objective": "security-awareness-training",
+  "scope": {
+    "region": "latam",
+    "sector": "technology",
+    "volume": 5,
+    "duration_days": 14
+  },
+  "constraints": {
+    "synthetic_data_only": true,
+    "channels": ["email", "sms"],
+    "max_messages_per_persona": 3
+  },
+  "model_policy": {
+    "models": [
+      { "family": "deepseek", "name": "deepseek-chat", "adapter_version": "1.0" },
+      { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" }
+    ]
+  },
+  "reproducibility": { "seed": 42, "deterministic": true },
+  "ethics": { "consent_reference": "IRB-2026-014", "isolated_environment": true }
+}
