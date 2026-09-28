@@ -10,7 +10,7 @@ Welcome to the documentation for **[Project Name]**, a configurable, reproducibl
 
 | Document | Description |
 |----------|-------------|
-| [PT Shell User Guide](./pt-shell-guide.md) | **How to use the tool**: install, launch, commands, settings, models, offline mode, measurement, troubleshooting. |
+| [PhishCraft User Guide](./pt-shell-guide.md) | **How to use the tool**: install, launch, commands, settings, models, offline mode, measurement, troubleshooting. |
 | [Architecture](./architecture.md) | Stage roles (ADK pipeline), phases, and the measurement loop. |
 | [Flow Schema](./flow-schema.md) | JSON data contracts for every hand-off across the pipeline. |
 | [Generator reliability plan](./generator-reliability-plan.md) | The design rationale behind the current build (workstreams W0–W5). |
@@ -26,8 +26,8 @@ The pipeline is a **Google ADK** agent graph — a linear, non-autonomous
 
 | Stage | Kind | Responsibility |
 |-------|------|----------------|
-| `generator_content_agent` | ADK `LlmAgent` | Writes content bindings (persona + email subject/body + SMS body) in the requested tone/difficulty/language. |
-| `assembler_agent` | ADK `BaseAgent` (deterministic) | Builds the `GeneratedCampaign`: ids, persona, seed-derived tracking link, schedule, references, provenance. |
+| `generator_content_agent` | ADK `LlmAgent` | Writes content bindings (persona echo + email subject/body + SMS body) in the requested tone/difficulty/language. |
+| `assembler_agent` | ADK `BaseAgent` (deterministic) | Builds the `GeneratedCampaign`: ids, persona (deterministically selected per pretext × recipient), seed-derived tracking link, schedule, references, provenance. |
 | `validator_agent` | ADK `BaseAgent` (deterministic) | Runs the four coherence checks (persona, timing, reference existence, link consistency) and emits the `CoherenceReport`. |
 
 See [architecture.md](./architecture.md) for the full pipeline, per-phase outputs,
@@ -49,7 +49,7 @@ Phase 3  Measurement (harness)      → reproducibility.json + reliability.json 
 ## Working with the docs
 
 - **Use the tool interactively:** `python -m ptshell` — see the
-  [PT Shell User Guide](./pt-shell-guide.md).
+  [PhishCraft User Guide](./pt-shell-guide.md).
 - **Architecture diagrams** are generated from code. Regenerate them after editing the pipeline:
 
   ```bash

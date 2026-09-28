@@ -37,8 +37,8 @@ pipeline measurable for reproducibility.
 
 | Stage | Kind | Responsibility |
 |-------|------|----------------|
-| `generator_content_agent` | ADK `LlmAgent` | Emits the 8 content bindings (persona + email subject/body + SMS body) in the requested tone/difficulty/language. Writes nothing structural. |
-| `assembler_agent` | ADK `BaseAgent` (deterministic) | Builds the `GeneratedCampaign`: ids, persona stamping, seed-derived tracking URL, spec-derived schedule, references, and provenance are all decided in code. |
+| `generator_content_agent` | ADK `LlmAgent` | Emits the 8 content bindings (persona echo + email subject/body + SMS body) in the requested tone/difficulty/language. Writes nothing structural; the persona it echoes is ignored — the deterministic layer picks it. |
+| `assembler_agent` | ADK `BaseAgent` (deterministic) | Builds the `GeneratedCampaign`: ids, persona stamping (the identity derived from `pretext × recipient` via `catalog.persona_for`), seed-derived tracking URL, spec-derived schedule, references, and provenance are all decided in code. |
 | `validator_agent` | ADK `BaseAgent` (deterministic) | Runs the four coherence checks and emits the `CoherenceReport`. |
 
 ### Core building blocks
@@ -46,7 +46,11 @@ pipeline measurable for reproducibility.
 1. **Deterministic assembly.** `assemble_campaign` (`generator_agent/assemble.py`)
    contains no randomness: the tracking token is `sha256(campaign_id:seed)[:12]`,
    the clock and send schedule are injected by the caller, and persona/reference
-   wiring is structural. Fixed inputs ⇒ byte-identical output.
+   wiring is structural. The impersonated persona is chosen by
+   `catalog.persona_for(pretext, recipient_id)` — org-chart lookups for
+   executive requests, the internal service desk for IT pretexts, and the
+   external supplier/carrier/bank personas for BEC pretexts — so the LLM never
+   invents the sender. Fixed inputs ⇒ byte-identical output.
 2. **Coherence validators** (`validator_agent/validate.py`, no LLM):
    - **Persona identity** — the impersonated identity (e.g. the CEO) is the
      same across every message in the campaign.
@@ -71,14 +75,16 @@ pipeline measurable for reproducibility.
 - `MissionConfig` is loaded from a file (`config/q3-awareness-2026.mission.json`):
    authorized, synthetic-only, isolated, channels ⊆ {email, sms}, seed.
 - The `CampaignSpec` (pretext, tone, difficulty, recipient, start time) and the
-  `PersonaCatalog` (12 internal + 2 external personas) are seeded into ADK
-  session state before the run.
+  `PersonaCatalog` (12 internal employees + 3 external personas) are seeded
+  into ADK session state before the run.
 
 ### Phase 1 — Generation (`generator_content_agent` → `assembler_agent`)
-- The `LlmAgent` writes only content (persona + subject/body), answering in a
-  strict 8-line format.
+- The `LlmAgent` writes only content (persona echo + subject/body), answering
+  in a strict 8-line format; the persona in its echo is discarded in favour of
+  the deterministic selection derived from the recipient's profile.
 - The deterministic assembler parses the bindings and constructs the
-  `GeneratedCampaign` (email + SMS follow-up) with provenance.
+  `GeneratedCampaign` (email + SMS follow-up) with provenance, stamping the
+  selected persona into the campaign and every sender.
 
 ### Phase 2 — Verification (`validator_agent`)
 - The deterministic validator runs the four coherence checks and emits a

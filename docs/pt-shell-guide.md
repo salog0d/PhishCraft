@@ -1,7 +1,7 @@
-# PT Shell — User Guide
+# PhishCraft — User Guide
 
-PT Shell is the **interactive harness** for the phishing-campaign generator:
-a Claude-Code-style terminal REPL where you configure settings in-session,
+**PhishCraft** is the **interactive harness** for the phishing-campaign
+generator: a Claude-Code-style terminal REPL where you configure settings in-session,
 generate synthetic email+SMS campaigns through the Google ADK pipeline, run
 the deterministic validator, and measure reproducibility & reliability.
 
@@ -40,14 +40,21 @@ python -m ptshell          # or: ./venv/bin/python -m ptshell
 You are greeted by the banner:
 
 ```
-╭─ welcome ───────────────────────────────────────────────╮
-│  PT SHELL  ·  interactive harness for the phishing-…    │
+ mmmmm  m    m mmmmm   mmmm  m    m   mmm  mmmmm    mm   mmmmmmmmmmmmm
+ #   "# #    #   #    #"   " #    # m"   " #   "#   ##   #        #
+ #mmm#" #mmmm#   #    "#mmm  #mmmm# #      #mmmm"  #  #  #mmmmm   #
+ #      #    #   #        "# #    # #      #   "m  #mm#  #        #
+ #      #    # mm#mm  "mmm#" #    #  "mmm" #    " #    # #        #
+           ><((((°>               ><((((°>
+       ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+╭─ PhishCraft ────────────────────────────────────────────╮
+│  interactive harness for the phishing-campaign gener…   │
 │  settings  /home/you/.pt-shell/config.json              │
 │  model     deepseek/deepseek-chat  (adapter: adk)       │
 │  recipient first non-executive  ·  pretext: …  seed: 42 │
 │  type /help for commands · /quit to exit                │
 ╰─────────────────────────────────────────────────────────╯
-pt · deepseek/deepseek-chat · adk · seed 42 >
+phishcraft · deepseek/deepseek-chat · adk · seed 42 >
 ```
 
 - The prompt shows your current **model · adapter · seed**.
@@ -85,8 +92,8 @@ pt> /generate            # call the model, build + validate the campaign
 | `/config reset` | Restore every setting to its default. |
 | `/model <id>` | Switch model. Applies to the **next** `/generate`. |
 | `/models` | List known model ids. |
-| `/recipients` | Table of the persona catalog (12 internal + supplier/bank). |
-| `/recipient <id>` | Set the default target persona. |
+| `/recipients` | Table of the target catalog (12 internal + supplier/bank/carrier). |
+| `/recipient <id>` | Set the default simulation target. The impersonated persona is derived automatically from the pretext + target (e.g. `executive_request` → the target's manager). |
 | `/generate` | One ADK pipeline run: generate → assemble → validate. |
 | `/validate [file.json]` | Run the 4 coherence checks on a campaign file (defaults to the last generated campaign). |
 | `/measure [--runs=N]` | Run the 10-spec reliability suite; prints the failure-rate summary. |
@@ -127,7 +134,7 @@ Unknown keys and invalid values are rejected with the valid options listed.
 | `difficulty` | `medium` | `easy`, `medium`, `hard` |
 | `language` | `en` | BCP-47-ish locale, e.g. `en`, `es-MX` |
 | `seed` | `42` | integer ≥ 0; drives the deterministic tracking link |
-| `recipient_id` | *(empty)* | catalog persona id; empty = first non-executive |
+| `recipient_id` | *(empty)* | target catalog id (internal employee); empty = first non-executive. The impersonated persona is derived from this id + the pretext. |
 | `start_at` | `2026-08-20T09:00:00Z` | ISO-8601 UTC campaign start |
 | `followup_minutes` | `75` | SMS is scheduled this many minutes after the email |
 | `adapter` | `adk` | `adk` (real ADK pipeline, needs a key) or `stub` (offline, §7) |
@@ -210,6 +217,7 @@ ADK_MODEL=deepseek/deepseek-chat python -m generator_agent.run \
 | `no SMTP sink — start it with: docker compose up -d` | MailHog isn't running (see §9). |
 | `/config` says `'x' must be one of: …` | The value isn't in the valid set — the message lists the options. |
 | Settings look wrong after an edit | `cat ~/.pt-shell/config.json`; fix by hand or run `/config reset`. |
+| Startup warns `could not read … config.json` | The settings file is empty or corrupt. PhishCraft repairs it automatically: an empty file is refilled with defaults, a corrupt one is moved to `config.json.corrupt-<ts>` (nothing is lost) and defaults are used. |
 | Want a different settings file | `PTSHELL_CONFIG=/path/config.json python -m ptshell`. |
 | DeepSeek calls are slow / timing out | The adapter streams with a 120 s read timeout; retry or switch model with `/model gemini-2.5-flash`. |
 
@@ -217,7 +225,7 @@ ADK_MODEL=deepseek/deepseek-chat python -m generator_agent.run \
 
 | What | Where |
 |---|---|
-| Shell code | `ptshell/` (`shell.py` = commands + UI, `config.py` = settings) |
+| PhishCraft shell code | `ptshell/` (`shell.py` = commands + UI, `config.py` = settings) |
 | Settings / history | `~/.pt-shell/config.json` · `~/.pt-shell/history` |
 | Generated campaigns (shell) | `data/shell/<campaign_id>/` |
 | Reliability / reproducibility results | `data/measurements/…` |

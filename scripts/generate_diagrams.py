@@ -93,7 +93,7 @@ def diagram_1_system_architecture() -> str:
     dot.node("mission", "MissionConfig\n(config file)", shape="box",
              fillcolor="#EAECEE", color=PALETTE["orchestration"],
              fontcolor="#1B2631")
-    dot.node("catalog", "PersonaCatalog\n(12 internal + 2 external)", shape="box",
+    dot.node("catalog", "TargetCatalog\n(12 internal + 3 external personas)\npersona_for(pretext, recipient)", shape="box",
              fillcolor="#EAECEE", color=PALETTE["orchestration"],
              fontcolor="#1B2631")
 

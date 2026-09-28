@@ -25,8 +25,9 @@
 - **Two channels** — email and SMS (voice is out of scope).
 - **Multi-model adapters** — generate through at least two model families so results are comparable and reproducible across families.
 - **Coherence validators** — a consistent impersonated persona, a coherent send timeline, existing cross-channel references, and link consistency (body links must match the CTA), all enforced in the schema and reported by a deterministic validator.
+- **Deterministic persona selection** — the impersonated identity is derived from the `(pretext, recipient)` pair (org chart for executive requests, service desk for IT pretexts, supplier/carrier/bank for BEC pretexts), so the LLM never invents the sender.
 - **Provenance log** — model, parameters, seed, and prompt hash recorded for every artifact.
-- **Synthetic-only data** — the persona catalog (12 internal + 2 external personas) is generated internally; no external OSINT tools or live collection.
+- **Synthetic-only data** — the target catalog (12 internal employees + 3 external personas) is generated internally; no external OSINT tools or live collection.
 - **Reproducibility & reliability measurement** — a harness that reruns the same spec with a fixed seed and counts constraint violations across a 10-spec baseline.
 - **Built-in authorization gate** — every campaign must be attested as authorized before generation runs.
 
@@ -97,10 +98,11 @@ uvicorn app.main:app --reload
 
 ---
 
-## Interactive shell (harness)
+## PhishCraft — interactive shell (harness)
 
-`python -m ptshell` opens a Claude-Code-style interactive REPL over the
-generator: a styled terminal UI (rich panels/tables, spinners, ✓/✗ badges),
+`python -m ptshell` opens **PhishCraft**, a Claude-Code-style interactive
+REPL over the generator: a purple-and-white styled terminal UI with an ASCII
+logo banner on startup, rich panels/tables, spinners, ✓/✗ badges,
 a colored prompt with the model inline, tab-completion with descriptions, and
 persistent command history. Configure everything in-session; settings persist
 to `~/.pt-shell/config.json` (override the location with the `PTSHELL_CONFIG`
@@ -117,7 +119,7 @@ python -m ptshell
 | `/help` | List commands. |
 | `/config [key [value]]` | View or set settings (e.g. `/config seed 7`, `/config pretext invoice_payment`); `/config reset` restores defaults. |
 | `/model <id>` · `/models` | Set or list the generation model (e.g. `deepseek/deepseek-chat`). Model switches apply to the next `/generate`. |
-| `/recipient <id>` · `/recipients` | Set the default recipient or list the persona catalog (12 internal + supplier/bank). |
+| `/recipient <id>` · `/recipients` | Set the default recipient or list the target catalog (12 internal + supplier/bank/carrier). |
 | `/generate` | Run the ADK pipeline once with the current settings; prints the campaign + the 4-check validator report and saves both under `data/shell/<campaign_id>/`. |
 | `/validate [campaign.json]` | Run the 4 coherence checks on a campaign file (defaults to the last generated one). |
 | `/measure [--runs=N]` | Run the 10-spec reliability suite and print the failure-rate table (writes `summary.md`). |
@@ -169,8 +171,8 @@ Every file's job, grouped by directory.
 
 | File | What it is / why it matters |
 |------|------------------------------|
-| `generator_agent/assemble.py` | Model-free, **deterministic** assembler: seed-derived tracking token, persona stamping, references, provenance, and the charter constant. Unit-tested with no API key. |
-| `generator_agent/catalog.py` | Loads the persona catalog (12 internal + external) and builds generator profiles from it. |
+| `generator_agent/assemble.py` | Model-free, **deterministic** assembler: seed-derived tracking token, persona stamping (from the deterministic selection), references, provenance, and the charter constant. Unit-tested with no API key. |
+| `generator_agent/catalog.py` | Loads the target catalog (12 internal + 3 external personas), builds generator profiles, and derives the impersonated persona per `(pretext, recipient)` via `persona_for`. |
 | `generator_agent/run.py` | CLI: loads a mission file, drives the ADK pipeline, writes campaign + report, optional `--send`. |
 | `generator_agent/send.py` | Delivers a campaign to the MailHog SMTP sink (email as email, SMS tagged `[SMS]`). |
 | `generator_agent/agent.py` | **Legacy reference**: the old LMQL query; superseded by the ADK content agent, kept for documentation only. |
@@ -200,7 +202,7 @@ Every file's job, grouped by directory.
 | File | What it is / why it matters |
 |------|------------------------------|
 | `org/fantazylabz_org.json` | The 12-person internal roster (BEC-relevant roles). |
-| `org/external_personas.json` | External BEC personas: a supplier and a bank (`.example` domains). |
+| `org/external_personas.json` | External BEC impersonation sources: a supplier, a bank, and a carrier (`.example` domains). |
 | `org/fantazylabz_org.md` | Human-readable roster by department. |
 | `org/fantazylabz_org_graph.md` | Org chart (Mermaid + text tree). |
 
@@ -223,7 +225,7 @@ Every file's job, grouped by directory.
 | `docs/models.md` | Candidate model catalog (fine-tuned + foundation baselines). |
 | `docs/README.md` | Docs index. |
 
-### `ptshell/` — the interactive harness (Claude-Code-style REPL)
+### `ptshell/` — PhishCraft, the interactive harness (Claude-Code-style REPL)
 
 | File | What it is / why it matters |
 |------|------------------------------|

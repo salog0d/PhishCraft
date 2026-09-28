@@ -226,7 +226,10 @@ Batches of per-recipient generation requests with a send schedule.
 
 A coherent multi-channel bundle for one impersonated persona. The assembler
 decides every structural field (ids, persona, seed-derived URL, schedule,
-references, provenance); the LLM only wrote the `subject`/`body` text.
+references, provenance); the LLM only wrote the `subject`/`body` text. The
+persona itself is derived deterministically from the `(pretext, recipient)`
+pair by `generator_agent.catalog.persona_for` (e.g. `executive_request` →
+the recipient's manager, `invoice_payment` → the external supplier).
 
 ```json
 {
