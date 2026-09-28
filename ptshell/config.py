@@ -4,6 +4,10 @@ Settings live in a JSON file — default ``~/.pt-shell/config.json``, override
 with the ``PTSHELL_CONFIG`` env var. Keys missing from the file fall back to
 the defaults below, so a partial file is fine. Keys are flat so they can be
 set from the shell with ``/config <key> <value>``.
+
+The loader self-heals: an empty file is treated as "no settings yet" and a
+corrupt file is moved aside (``*.corrupt-<ts>``) before falling back to
+defaults, so a bad file never blocks startup and is never silently lost.
 """
 
 from __future__ import annotations
@@ -11,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 from app.core.schemas import Difficulty, Pretext, Tone
@@ -56,21 +61,49 @@ def config_path() -> Path:
 
 
 def load() -> dict:
-    """Defaults merged with the stored settings file (if any)."""
+    """Defaults merged with the stored settings file (if any).
+
+    Self-heals broken files instead of warning on every launch:
+    * missing file → defaults, untouched;
+    * empty file → defaults (written back so the next start is quiet);
+    * corrupt JSON → backed up next to the original, then defaults.
+    """
     cfg = dict(DEFAULTS)
     path = config_path()
-    if path.exists():
+    if not path.exists():
+        return cfg
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"warning: could not read {path} ({exc}); using defaults",
+              file=sys.stderr)
+        return cfg
+    if not raw.strip():
+        # Empty file (e.g. a crash mid-write or an accidental `touch`):
+        # start fresh and persist the defaults so it becomes valid JSON.
+        save(cfg)
+        return cfg
+    try:
+        stored = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        backup = path.with_name(
+            f"{path.name}.corrupt-{int(time.time())}"
+        )
         try:
-            stored = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
+            path.rename(backup)
             print(
-                f"warning: could not read {path} ({exc}); using defaults",
+                f"warning: {path} is not valid JSON ({exc}); moved it to "
+                f"{backup} and using defaults",
                 file=sys.stderr,
             )
-            return cfg
-        for key, value in stored.items():
-            if key in DEFAULTS:
-                cfg[key] = coerce(key, value)
+        except OSError:
+            print(f"warning: could not read {path} ({exc}); using defaults",
+                  file=sys.stderr)
+        save(cfg)
+        return cfg
+    for key, value in stored.items():
+        if key in DEFAULTS:
+            cfg[key] = coerce(key, value)
     return cfg
 
 

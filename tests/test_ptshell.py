@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 
 import pytest
@@ -57,6 +58,30 @@ def test_config_reset_drops_the_file(tmp_path, monkeypatch):
     cfg_mod.reset()
     assert not path.exists()
     assert cfg_mod.load()["seed"] == 42
+
+
+def test_config_empty_file_falls_back_to_defaults(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("PTSHELL_CONFIG", str(path))
+    path.write_text("", encoding="utf-8")  # e.g. a crashed save / touch
+    cfg = cfg_mod.load()
+    assert cfg["seed"] == 42
+    assert cfg["model"] == "deepseek/deepseek-chat"
+    # the empty file is repaired into valid JSON defaults
+    assert json.loads(path.read_text(encoding="utf-8"))["seed"] == 42
+
+
+def test_config_corrupt_file_is_backed_up(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("PTSHELL_CONFIG", str(path))
+    path.write_text("{ this is not json", encoding="utf-8")
+    cfg = cfg_mod.load()
+    assert cfg["seed"] == 42
+    # the corrupt file is moved aside, not deleted, and replaced by defaults
+    backups = list(tmp_path.glob("config.json.corrupt-*"))
+    assert len(backups) == 1
+    assert "{ this is not json" in backups[0].read_text(encoding="utf-8")
+    assert json.loads(path.read_text(encoding="utf-8"))["seed"] == 42
 
 
 def test_config_validation():

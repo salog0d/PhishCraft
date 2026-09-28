@@ -1,4 +1,4 @@
-"""Interactive harness shell — a styled, visual REPL over the generator.
+"""PhishCraft — the interactive harness shell: a styled, visual REPL over the generator.
 
     python -m ptshell
 
@@ -34,6 +34,28 @@ from ptshell.config import KNOWN_MODELS
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# --------------------------------------------------------------------- #
+# PhishCraft look & feel: a purple + white palette (dim greys allowed).
+# --------------------------------------------------------------------- #
+PURPLE = "#a855f7"        # vivid purple — borders, accents
+PURPLE_BRIGHT = "#c084fc"  # light purple — headings, prompt, highlights
+PURPLE_SOFT = "#a78bfa"   # soft violet — secondary accents
+PURPLE_DEEP = "#6d28d9"   # deep purple — selection backgrounds
+
+# The startup drawing: a FIGlet "PHISHCRAFT" logo and a little fish scene.
+_LOGO = [
+    " mmmmm  m    m mmmmm   mmmm  m    m   mmm  mmmmm    mm   mmmmmmmmmmmmm",
+    ' #   "# #    #   #    #"   " #    # m"   " #   "#   ##   #        #',
+    ' #mmm#" #mmmm#   #    "#mmm  #mmmm# #      #mmmm"  #  #  #mmmmm   #',
+    ' #      #    #   #        "# #    # #      #   "m  #mm#  #        #',
+    ' #      #    # mm#mm  "mmm#" #    #  "mmm" #    " #    # #        #',
+]
+
+_FISH = [
+    "          ><((((°>               ><((((°>",
+    "      ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~",
+]
+
 COMMANDS: dict[str, str] = {
     "help": "show this command list (/help [command])",
     "config": "view or set settings (/config, /config <key> [value], /config reset)",
@@ -51,13 +73,13 @@ COMMANDS: dict[str, str] = {
 }
 
 _PROMPT_STYLE = {
-    "prompt": "ansicyan bold",
+    "prompt": "#c084fc bold",
     "prompt.dim": "ansibrightblack",
-    "bottom-toolbar": "bg:#303030 ansibrightblack",
-    "completion-menu.completion": "bg:#202020 #d0d0d0",
-    "completion-menu.completion.current": "bg:#005f87 #ffffff",
-    "completion-menu.meta.completion": "bg:#303030 ansibrightblack",
-    "completion-menu.meta.completion.current": "bg:#005f87 #e0e0e0",
+    "bottom-toolbar": "bg:#2e1065 #e9d5ff",
+    "completion-menu.completion": "bg:#1e1b4b #d8b4fe",
+    "completion-menu.completion.current": "bg:#6d28d9 #ffffff",
+    "completion-menu.meta.completion": "bg:#312e81 #a78bfa",
+    "completion-menu.meta.completion.current": "bg:#6d28d9 #e9d5ff",
 }
 
 
@@ -84,25 +106,29 @@ class PtShell:
     def _dim(self, message: str) -> None:
         self.console.print(Text(message, style="dim"))
 
-    def _panel(self, content, title: str, border: str = "cyan") -> None:
+    def _panel(self, content, title: str, border: str = PURPLE) -> None:
         self.console.print(Panel(content, title=title, title_align="left",
                                  border_style=border, padding=(1, 2)))
 
     def _banner(self) -> None:
         recipient = self.cfg["recipient_id"] or "first non-executive"
+        self.console.print(Text("\n".join(_LOGO), style=f"{PURPLE_BRIGHT} bold"))
+        self.console.print(
+            Text(_FISH[0] + "\n", style="white")
+            + Text(_FISH[1], style=f"{PURPLE_SOFT} dim")
+        )
         body = Text()
-        body.append("PT SHELL", style="bold cyan")
-        body.append("  ·  interactive harness for the phishing-campaign generator\n",
+        body.append("interactive harness for the phishing-campaign generator\n",
                     style="dim")
-        body.append(f"settings  ", style="bold")
+        body.append("settings  ", style="bold")
         body.append(str(cfg_mod.config_path()) + "\n")
-        body.append(f"model     ", style="bold")
+        body.append("model     ", style="bold")
         body.append(f"{self.cfg['model']}  (adapter: {self.cfg['adapter']})\n")
-        body.append(f"recipient ", style="bold")
+        body.append("recipient ", style="bold")
         body.append(f"{recipient}  ·  pretext: {self.cfg['pretext']}  ·  "
                     f"tone: {self.cfg['tone']}  ·  seed: {self.cfg['seed']}\n")
         body.append("type /help for commands · /quit to exit", style="dim")
-        self._panel(body, "welcome", border="cyan")
+        self._panel(body, "PhishCraft", border=PURPLE)
 
     # ------------------------------------------------------------------ #
     # plumbing
@@ -156,7 +182,7 @@ class PtShell:
         body.append(f"campaign  {campaign.campaign_id} · "
                     f"{len(campaign.messages)} messages\n\n", style="dim")
 
-        channel_style = {"email": "cyan", "sms": "magenta"}
+        channel_style = {"email": "white", "sms": PURPLE}
         for m in campaign.messages:
             badge = m.channel.value.upper()
             body.append(f"  {badge:<5} ", style=channel_style[m.channel.value])
@@ -168,7 +194,7 @@ class PtShell:
             body.append(f"{m.body[:130]}\n")
             body.append(f"    cta      {m.call_to_action.landing_url}\n\n",
                         style="dim")
-        self._panel(body, f"campaign · {campaign.campaign_id}", border="cyan")
+        self._panel(body, f"campaign · {campaign.campaign_id}")
 
         table = Table(title="validator report", box=box.SIMPLE_HEAVY,
                       header_style="bold", expand=False)
@@ -190,7 +216,7 @@ class PtShell:
     def _render_config(self) -> None:
         table = Table(title=f"settings ({cfg_mod.config_path()})",
                       box=box.SIMPLE_HEAVY, expand=False)
-        table.add_column("key", style="bold cyan")
+        table.add_column("key", style=f"bold {PURPLE_BRIGHT}")
         table.add_column("value")
         table.add_column("valid options", style="dim")
         for key in sorted(self.cfg):
@@ -234,7 +260,7 @@ class PtShell:
             self.console.print(f"[bold]/{name}[/bold] — {COMMANDS[name]}")
             return
         table = Table(title="commands", box=box.SIMPLE_HEAVY, expand=False,
-                      header_style="bold cyan")
+                      header_style=f"bold {PURPLE_BRIGHT}")
         table.add_column("command", style="bold")
         table.add_column("description")
         for key, desc in COMMANDS.items():
@@ -308,7 +334,7 @@ class PtShell:
         table.add_column("org_type")
         table.add_column("name / role", style="bold")
         table.add_column("email", style="dim")
-        class_style = {"internal": "green", "external": "blue"}
+        class_style = {"internal": "white", "external": PURPLE}
         for p in load_catalog():
             table.add_row(
                 str(p["id"]),
@@ -346,8 +372,8 @@ class PtShell:
         spec = self._build_spec(mission)
         self._apply_model()
         with self.console.status(
-            f"[cyan]generating with {self.cfg['model']} "
-            f"(adapter: {self.cfg['adapter']})…[/cyan]"
+            f"[{PURPLE_BRIGHT}]generating with {self.cfg['model']} "
+            f"(adapter: {self.cfg['adapter']})…[/{PURPLE_BRIGHT}]"
         ):
             if self.cfg["adapter"] == "stub":
                 from measurement.adapters import get_adapter
@@ -408,8 +434,8 @@ class PtShell:
         if self.cfg["adapter"] != "stub":
             self._apply_model()
         with self.console.status(
-            f"[cyan]running 10-spec reliability suite "
-            f"(adapter: {self.cfg['adapter']}, runs: {runs})…[/cyan]"
+            f"[{PURPLE_BRIGHT}]running 10-spec reliability suite "
+            f"(adapter: {self.cfg['adapter']}, runs: {runs})…[/{PURPLE_BRIGHT}]"
         ):
             payload = run_reliability(adapter_name=self.cfg["adapter"], runs=runs)
 
@@ -421,7 +447,7 @@ class PtShell:
                         else "bold green")
         headline.append(f"   (failure rate {payload['failure_rate']})")
         self._panel(headline, f"reliability · {payload['adapter']} · "
-                              f"{payload['model']}", border="cyan")
+                              f"{payload['model']}")
 
         table = Table(title="violations by coherence check",
                       box=box.SIMPLE_HEAVY, expand=False)
@@ -441,8 +467,8 @@ class PtShell:
         if self.cfg["adapter"] != "stub":
             self._apply_model()
         with self.console.status(
-            f"[cyan]reproducibility run: adapter {self.cfg['adapter']}, "
-            f"spec {'all' if spec_id is None else spec_id} × 2…[/cyan]"
+            f"[{PURPLE_BRIGHT}]reproducibility run: adapter {self.cfg['adapter']}, "
+            f"spec {'all' if spec_id is None else spec_id} × 2…[/{PURPLE_BRIGHT}]"
         ):
             results = run_reproduce(
                 spec_id=spec_id, runs=2, adapter_name=self.cfg["adapter"]
@@ -476,7 +502,9 @@ class PtShell:
             self._dim("no recipient recorded — run /generate first")
             return
         to_addr = self.last_recipient["recipient"]["email"]
-        with self.console.status("[cyan]sending to the MailHog sink…[/cyan]"):
+        with self.console.status(
+            f"[{PURPLE_BRIGHT}]sending to the MailHog sink…[/{PURPLE_BRIGHT}]"
+        ):
             try:
                 n = send_campaign(str(campaign_path), to_addr, "localhost", 1025)
             except ConnectionRefusedError:
@@ -506,10 +534,10 @@ class PtShell:
             body.append("\nfiles      ", style="bold")
             body.append(str(self.last_paths["campaign"]) + "\n           ")
             body.append(str(self.last_paths["report"]))
-        self._panel(body, "last run", border="cyan")
+        self._panel(body, "last run")
 
     def cmd_quit(self, arg: str) -> bool:
-        self.console.print(Text("bye.", style="green"))
+        self.console.print(Text("bye.", style=PURPLE_BRIGHT))
         return True
 
     cmd_exit = cmd_quit
@@ -583,7 +611,7 @@ class PtShell:
             adapter = self.cfg["adapter"]
             seed = self.cfg["seed"]
             prompt_html = HTML(
-                f"<prompt>pt</prompt>"
+                f"<prompt>phishcraft</prompt>"
                 f"<prompt.dim> · {model} · {adapter} · seed {seed}</prompt.dim> &gt; "
             )
             recipient = self.cfg["recipient_id"] or "default recipient"

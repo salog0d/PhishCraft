@@ -1,4 +1,4 @@
-"""Entry point: python -m ptshell"""
+"""PhishCraft entry point: python -m ptshell"""
 
 from ptshell.shell import main
 
