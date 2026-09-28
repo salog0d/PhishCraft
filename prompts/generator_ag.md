@@ -34,6 +34,7 @@ You turn a `PhishingGenerationRequest` (plus its seed prompt template) into one 
 
 Hard rules:
 - Email messages **must** have a `subject`; SMS messages **must not** (and stay ≤ 1600 characters).
+- The impersonated persona is **given in the user message**. Use that identity byte‑for‑byte for every message — never invent a persona and never reuse an identity from the examples below.
 - The `sender` must stay identical to the campaign persona across every message (the impersonated identity is the same everywhere).
 - The campaign has **one** tracking link: the landing URL given in the user message. If your body or subject mentions a link, copy that exact URL — **never invent a tracking token**.
 - `provenance` records the exact `model`, `params` (including the `seed`), `prompt_template_id`, and `prompt_hash` (sha256 of the rendered prompt) actually used.
@@ -42,16 +43,19 @@ Hard rules:
 ---
 ### Few‑Shot Examples
 
+The examples show the *shape and style* to follow; the persona, recipient and
+URL are placeholders — replace them with the values from the user message.
+
 **Example 1 (channel: email, pretext: executive_request, model: anthropic)**
 ```json
 {
   "message_id": "msg-0001",
   "channel": "email",
   "scheduled_at": "2026-08-20T09:00:00Z",
-  "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech", "impersonated_brand": "Fantazy Labz" },
-  "subject": "Quick approval needed before EOD",
-  "body": "Rebecca, I'm finalizing the Q3 vendor payment and need your sign-off today. Please review the summary and confirm. — Elena",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/<campaign-token>", "button_label": "Review Summary" },
+  "sender": { "display_name": "<persona display name>", "from_address": "<persona address>", "impersonated_brand": "<brand if any>" },
+  "subject": "Action required before end of day",
+  "body": "Hi <recipient first name>, please review the summary I shared and confirm before end of day. — <persona first name>",
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.example.com/t/<campaign-token>", "button_label": "Review Summary" },
   "references": [],
   "provenance": {
     "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
@@ -71,9 +75,9 @@ Hard rules:
   "message_id": "msg-0002",
   "channel": "sms",
   "scheduled_at": "2026-08-20T10:15:00Z",
-  "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech" },
-  "body": "Hi Rebecca, did you get my email about the Q3 approval? Need it before EOD - link: sim.fantazylabz.tech/t/<campaign-token>",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/<campaign-token>" },
+  "sender": { "display_name": "<persona display name>", "from_address": "<persona address>" },
+  "body": "Hi <recipient first name>, did you get my email? Please confirm before EOD - link: sim.example.com/t/<campaign-token>",
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.example.com/t/<campaign-token>" },
   "references": ["msg-0001"],
   "provenance": {
     "model": { "family": "openai", "name": "gpt-4.1", "adapter_version": "1.0" },
@@ -119,25 +123,33 @@ def generator_ag(
     seed = mission_config["reproducibility"]["seed"]
     landing_url = f"https://sim.{email_domain}/t/{tracking_token(mission_config['campaign_id'], seed)}"
     cta_type, cta_label = CTA_BY_PRETEXT.get(pretext, ("click_link", "Open"))
+    selected = profile.get("persona")  # deterministic selection (catalog.persona_for)
+    user = (
+        f"Campaign {mission_config['campaign_id']}, pretext={pretext}, "
+        f"tone={tone}, difficulty={difficulty}, language=en.\n"
+        f"Recipient: {recipient['full_name']} ({recipient['role']}, "
+        f"{recipient['department']}).\n"
+        f"The campaign's single landing URL (if you write a link, copy this "
+        f"exact URL): {landing_url}\n"
+        "The impersonated persona is fixed — use this identity for every "
+        "message, byte-for-byte:\n"
+        f"- display name: {selected['display_name']}\n"
+        f"- role: {selected.get('role') or '(not specified)'}\n"
+        f"- from address: {selected['email']}\n"
+        "Now write the first message, an email:\n"
+        "- subject: [EMAIL_SUBJECT]\n"
+        "- body: [EMAIL_BODY]\n"
+        "- scheduled at (ISO-8601 UTC, e.g. 2026-08-20T09:00:00Z): [EMAIL_TIME]\n"
+        "Then an SMS follow-up referencing the email, sent strictly after it:\n"
+        "- body: [SMS_BODY]\n"
+        "- scheduled at (ISO-8601 UTC): [SMS_TIME]\n"
+    )
     '''lmql
     argmax
         """system:
         {CHARTER}
 
-        user: Campaign {campaign_id}, pretext={pretext}, tone={tone}, difficulty={difficulty}, language={language}.
-        Recipient: {recipient_name} ({recipient_role}, {recipient_department}).
-        The campaign's single landing URL (if you write a link, copy this exact URL): {landing_url}
-        The impersonated persona (it must be one single identity, used for every message):
-        - display name: [PERSONA_NAME]
-        - role: [PERSONA_ROLE]
-        - from address: [PERSONA_EMAIL]
-        Now write the first message, an email:
-        - subject: [EMAIL_SUBJECT]
-        - body: [EMAIL_BODY]
-        - scheduled at (ISO-8601 UTC, e.g. 2026-08-20T09:00:00Z): [EMAIL_TIME]
-        Then an SMS follow-up referencing the email, sent strictly after it:
-        - body: [SMS_BODY]
-        - scheduled at (ISO-8601 UTC): [SMS_TIME]
+        user: {user}
         """
     from
         lmql.model(os.environ.get("LMQL_MODEL", "openai/gpt-4o"))
@@ -153,12 +165,12 @@ def generator_ag(
         and REGEX(SMS_TIME, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
         and EMAIL_TIME < SMS_TIME
     '''
-    # The persona is bound once above and stamped into every sender below:
-    # persona-identity coherence holds by construction.
+    # The persona is decided deterministically above and stamped into every
+    # sender below: persona-identity coherence holds by construction.
     persona = {
-        "display_name": PERSONA_NAME.strip(),
-        "email": PERSONA_EMAIL.strip(),
-        "role": PERSONA_ROLE.strip(),
+        "display_name": selected["display_name"],
+        "email": selected["email"],
+        "role": selected.get("role"),
     }
     sender = {
         "display_name": persona["display_name"],
@@ -166,14 +178,7 @@ def generator_ag(
     }
     # Rebuild the exact rendered prompt for the provenance hash. Keep this
     # mirroring the query text above — it is what `prompt_hash` hashes.
-    rendered_prompt = (
-        f"system:\n{CHARTER}\n\nuser: Campaign {mission_config['campaign_id']}, "
-        f"pretext={pretext}, tone={tone}, difficulty={difficulty}.\n"
-        f"Recipient: {recipient['full_name']} ({recipient['role']}, "
-        f"{recipient['department']}).\n"
-        "The impersonated persona (it must be one single identity, used for "
-        "every message): ..."
-    )
+    rendered_prompt = f"system:\n{CHARTER}\n\nuser: {user}"
     model = mission_config["model_policy"]["models"][0]
     seed = mission_config["reproducibility"]["seed"]
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -196,11 +201,7 @@ def generator_ag(
             "sender": sender,
             "subject": EMAIL_SUBJECT.strip(),  # control flow by program: email only
             "body": EMAIL_BODY.strip(),
-            "call_to_action": {      "sender": {
-        "display_name": "Elena Marchetti",
-        "from_address": "ceo@fantazylabz.tech",
-        "impersonated_brand": null
-      },
+            "call_to_action": {
                 "type": cta_type,
                 "landing_url": landing_url,
                 "button_label": cta_label,

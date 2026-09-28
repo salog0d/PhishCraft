@@ -30,6 +30,7 @@ You turn a `PhishingGenerationRequest` (plus its seed prompt template) into one 
 
 Hard rules:
 - Email messages **must** have a `subject`; SMS messages **must not** (and stay ≤ 1600 characters).
+- The impersonated persona is **given in the user message**. Use that identity byte‑for‑byte for every message — never invent a persona and never reuse an identity from the examples below.
 - The `sender` must stay identical to the campaign persona across every message (the impersonated identity is the same everywhere).
 - The campaign has **one** tracking link: the landing URL given in the user message. If your body or subject mentions a link, copy that exact URL — **never invent a tracking token**.
 - `provenance` records the exact `model`, `params` (including the `seed`), `prompt_template_id`, and `prompt_hash` (sha256 of the rendered prompt) actually used.
@@ -38,16 +39,19 @@ Hard rules:
 ---
 ### Few‑Shot Examples
 
+The examples show the *shape and style* to follow; the persona, recipient and
+URL are placeholders — replace them with the values from the user message.
+
 **Example 1 (channel: email, pretext: executive_request, model: anthropic)**
 ```json
 {
   "message_id": "msg-0001",
   "channel": "email",
   "scheduled_at": "2026-08-20T09:00:00Z",
-  "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech", "impersonated_brand": "Fantazy Labz" },
-  "subject": "Quick approval needed before EOD",
-  "body": "Rebecca, I'm finalizing the Q3 vendor payment and need your sign-off today. Please review the summary and confirm. — Elena",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/<campaign-token>", "button_label": "Review Summary" },
+  "sender": { "display_name": "<persona display name>", "from_address": "<persona address>", "impersonated_brand": "<brand if any>" },
+  "subject": "Action required before end of day",
+  "body": "Hi <recipient first name>, please review the summary I shared and confirm before end of day. — <persona first name>",
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.example.com/t/<campaign-token>", "button_label": "Review Summary" },
   "references": [],
   "provenance": {
     "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
@@ -67,9 +71,9 @@ Hard rules:
   "message_id": "msg-0002",
   "channel": "sms",
   "scheduled_at": "2026-08-20T10:15:00Z",
-  "sender": { "display_name": "Elena Marchetti", "from_address": "ceo@fantazylabz.tech" },
-  "body": "Hi Rebecca, did you get my email about the Q3 approval? Need it before EOD - link: sim.fantazylabz.tech/t/<campaign-token>",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.fantazylabz.tech/t/<campaign-token>" },
+  "sender": { "display_name": "<persona display name>", "from_address": "<persona address>" },
+  "body": "Hi <recipient first name>, did you get my email? Please confirm before EOD - link: sim.example.com/t/<campaign-token>",
+  "call_to_action": { "type": "click_link", "landing_url": "https://sim.example.com/t/<campaign-token>" },
   "references": ["msg-0001"],
   "provenance": {
     "model": { "family": "openai", "name": "gpt-4.1", "adapter_version": "1.0" },
@@ -160,6 +164,24 @@ def user_prompt(
     """The query's user segment — mirrors the user text in ``agent.py``."""
     recipient = profile["recipient"]
     landing_url = landing_url_for(mission_config, profile)
+    persona = profile.get("persona")
+    if persona:
+        persona_block = (
+            "The impersonated persona is fixed — use this identity for every "
+            "message, byte-for-byte:\n"
+            f"- display name: {persona['display_name']}\n"
+            f"- role: {persona.get('role') or '(not specified)'}\n"
+            f"- from address: {persona['email']}\n"
+        )
+    else:
+        # No persona supplied (legacy standalone path): the model proposes one.
+        persona_block = (
+            "The impersonated persona (it must be one single identity, used for "
+            "every message):\n"
+            "- display name: [PERSONA_NAME]\n"
+            "- role: [PERSONA_ROLE]\n"
+            "- from address: [PERSONA_EMAIL]\n"
+        )
     return (
         f"Campaign {mission_config['campaign_id']}, pretext={pretext}, "
         f"tone={tone}, difficulty={difficulty}, language={language}.\n"
@@ -167,11 +189,7 @@ def user_prompt(
         f"{recipient['department']}).\n"
         f"The campaign's single landing URL (if you write a link, copy this "
         f"exact URL): {landing_url}\n"
-        "The impersonated persona (it must be one single identity, used for "
-        "every message):\n"
-        "- display name: [PERSONA_NAME]\n"
-        "- role: [PERSONA_ROLE]\n"
-        "- from address: [PERSONA_EMAIL]\n"
+        f"{persona_block}"
         "Now write the first message, an email:\n"
         "- subject: [EMAIL_SUBJECT]\n"
         "- body: [EMAIL_BODY]\n"
@@ -218,13 +236,18 @@ def assemble_campaign(
     actual_model: dict | None = None,
     runtime: dict[str, str] | None = None,
     language: str = "en",
+    persona_override: dict | None = None,
 ) -> GeneratedCampaign:
     """Build the ``GeneratedCampaign`` from the query's bound variables.
 
     Coherence rules enforced here, not by the model:
 
-    - **persona_identity** — the persona is bound once and stamped into every
-      sender; the model never writes a sender field.
+    - **persona_identity** — when ``persona_override`` is given (the
+      deterministically selected persona for the pretext/recipient pair) it is
+      stamped into the campaign persona and every sender; the model's echoed
+      persona bindings are ignored. Without an override the bindings supply the
+      persona (legacy standalone path). Either way the model never writes a
+      sender field.
     - **timing** — ``scheduled`` (or the decode-time ``EMAIL_TIME < SMS_TIME``
       constraint) orders the messages; re-checked here by the schema.
     - **cross_channel_reference** — ``references`` is written by this function,
@@ -243,12 +266,20 @@ def assemble_campaign(
 
     b = {k: bindings[k].strip() for k in BINDING_KEYS}
 
-    # Bound once, stamped everywhere.
-    persona = {
-        "display_name": b["PERSONA_NAME"],
-        "email": b["PERSONA_EMAIL"],
-        "role": b["PERSONA_ROLE"],
-    }
+    # The persona comes from the deterministic selection when available; the
+    # model's echoed bindings only exist to satisfy the 8-line contract.
+    if persona_override:
+        persona = {
+            "display_name": str(persona_override["display_name"]),
+            "email": str(persona_override["email"]),
+            "role": persona_override.get("role"),
+        }
+    else:
+        persona = {
+            "display_name": b["PERSONA_NAME"],
+            "email": b["PERSONA_EMAIL"],
+            "role": b["PERSONA_ROLE"],
+        }
     sender = {"display_name": persona["display_name"], "from_address": persona["email"]}
 
     seed = mission_config["reproducibility"]["seed"]

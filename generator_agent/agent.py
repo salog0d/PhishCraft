@@ -6,11 +6,14 @@ key (``LMQL_MODEL`` env var, default ``openai/gpt-4o``; provider key env vars
 per LMQL docs).
 
 Constraint design (per "Prompting is Programming"):
-- persona bound once; identity coherence is structural in ``assemble``.
+- persona identity is decided by the deterministic layer: when the profile
+  carries a ``persona`` (see ``generator_agent.catalog.persona_for``) it is
+  stamped into every message by ``assemble``; the bindings only echo it.
 - ``EMAIL_TIME < SMS_TIME`` is a decode-time constraint.
 - SMS body capped at 1600 characters in ``where``.
 - the user segment here must mirror ``assemble.rendered_prompt`` exactly, or
-  the provenance hash stops matching the prompt actually sent.
+  the provenance hash stops matching the prompt actually sent — it is built by
+  ``assemble.user_prompt`` itself, so the two cannot drift.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ import os
 
 import lmql
 
-from generator_agent.assemble import CHARTER, assemble_campaign
+from generator_agent.assemble import CHARTER, assemble_campaign, user_prompt
 
 
 @lmql.query
@@ -30,24 +33,13 @@ def generator_ag(
     tone: str,
     difficulty: str,
 ):
+    user = user_prompt(mission_config, profile, pretext, tone, difficulty, "en")
     '''lmql
     argmax
         """system:
         {CHARTER}
 
-        user: Campaign {campaign_id}, pretext={pretext}, tone={tone}, difficulty={difficulty}.
-        Recipient: {recipient_name} ({recipient_role}, {recipient_department}).
-        The impersonated persona (it must be one single identity, used for every message):
-        - display name: [PERSONA_NAME]
-        - role: [PERSONA_ROLE]
-        - from address: [PERSONA_EMAIL]
-        Now write the first message, an email:
-        - subject: [EMAIL_SUBJECT]
-        - body: [EMAIL_BODY]
-        - scheduled at (ISO-8601 UTC, e.g. 2026-08-20T09:00:00Z): [EMAIL_TIME]
-        Then an SMS follow-up referencing the email, sent strictly after it:
-        - body: [SMS_BODY]
-        - scheduled at (ISO-8601 UTC): [SMS_TIME]
+        user: {user}
         """
     from
         lmql.model(os.environ.get("LMQL_MODEL", "openai/gpt-4o"))
@@ -74,5 +66,6 @@ def generator_ag(
         "SMS_TIME": SMS_TIME,
     }
     return assemble_campaign(
-        bindings, mission_config, profile, pretext, tone, difficulty
+        bindings, mission_config, profile, pretext, tone, difficulty,
+        persona_override=profile.get("persona"),
     )
