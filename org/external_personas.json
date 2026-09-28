@@ -17,6 +17,15 @@
       "email": "alerts@meridianbank.example",
       "brand": "Meridian Bank",
       "supports_pretexts": ["account_suspension", "password_reset"]
+    },
+    {
+      "persona_id": "ext-carrier-01",
+      "class": "external",
+      "org_type": "carrier",
+      "display_name": "SwiftShip Logistics — Package Notifications",
+      "email": "notifications@swiftship.example",
+      "brand": "SwiftShip Logistics",
+      "supports_pretexts": ["package_delivery"]
     }
   ]
 }
