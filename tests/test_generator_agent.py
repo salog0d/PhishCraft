@@ -147,3 +147,115 @@ def test_assemble_normalizes_a_stale_sms_link():
     assert str(token).endswith("8b9dc310f705")
     assert "abc123" not in campaign.messages[1].body
     assert "8b9dc310f705" in campaign.messages[1].body
+
+
+# --------------------------------------------------------------------------- #
+# Deterministic persona selection (catalog.persona_for + persona_override)
+# --------------------------------------------------------------------------- #
+
+
+def test_persona_for_executive_request_is_the_recipients_manager():
+    from generator_agent.catalog import persona_for
+
+    p = persona_for("executive_request", 41)  # Bruno -> IT Manager
+    assert p["display_name"] == "Natalia Popov"
+    assert p["email"] == "natalia.popov@fantazylabz.tech"
+    assert p["role"] == "IT Manager"
+
+
+def test_persona_for_executive_request_falls_back_for_a_managerless_exec():
+    from generator_agent.catalog import persona_for
+
+    p = persona_for("executive_request", 1)  # CEO has no reports_to -> CFO
+    assert p["display_name"] == "Sofia Reyes"
+    assert p["email"] == "sofia.reyes@fantazylabz.tech"
+
+
+def test_persona_for_it_pretexts_is_the_service_desk():
+    from generator_agent.catalog import persona_for
+
+    for pretext in ("it_support", "password_reset"):
+        p = persona_for(pretext, 41)
+        assert p["email"] == "helpdesk@fantazylabz.tech"
+
+
+def test_persona_for_hr_notice_is_the_people_ops_alias():
+    from generator_agent.catalog import persona_for
+
+    # The HR director herself receives HR notices from the department alias —
+    # a named director would self-impersonate, so the alias avoids collisions.
+    for target in (41, 16):
+        p = persona_for("hr_notice", target)
+        assert p["email"] == "peopleops@fantazylabz.tech"
+
+
+def test_persona_for_invoice_payment_is_the_external_supplier():
+    from generator_agent.catalog import persona_for
+
+    p = persona_for("invoice_payment", 24)
+    assert p["email"] == "ap@northwind-supplies.example"
+
+
+def test_persona_for_account_suspension_is_the_external_bank():
+    from generator_agent.catalog import persona_for
+
+    p = persona_for("account_suspension", 40)
+    assert p["email"] == "alerts@meridianbank.example"
+
+
+def test_persona_for_package_delivery_is_the_external_carrier():
+    from generator_agent.catalog import persona_for
+
+    p = persona_for("package_delivery", 41)
+    assert p["email"] == "notifications@swiftship.example"
+
+
+def test_persona_for_never_impersonates_its_own_recipient():
+    from generator_agent.catalog import persona_for
+
+    # The helpdesk aliases IT pretexts, so an IT-persona target collides with
+    # an internal alias only if they shared the address; guard the fallback:
+    p = persona_for("shared_document", 41)  # Bruno -> manager, not Bruno
+    assert p["email"] != "bruno.costa@fantazylabz.tech"
+
+
+def test_profile_for_derives_persona_and_uses_the_target_id():
+    from generator_agent.catalog import profile_for
+
+    pr = profile_for(41, "executive_request")
+    assert pr["target_id"] == "tgt-41"          # not the hardcoded tgt-0001
+    assert pr["attributes"]["seniority"] == "junior"  # level 5, not 'senior'
+    assert pr["persona"]["display_name"] == "Natalia Popov"
+
+
+def test_persona_override_stamps_the_deterministic_persona():
+    """The model's echoed persona is discarded when an override is supplied."""
+    override = {
+        "display_name": "Natalia Popov",
+        "email": "natalia.popov@fantazylabz.tech",
+        "role": "IT Manager",
+    }
+    campaign = assemble_campaign(
+        BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
+        persona_override=override,
+    )
+    assert campaign.persona.display_name == "Natalia Popov"
+    for message in campaign.messages:
+        assert message.sender.display_name == "Natalia Popov"
+        assert str(message.sender.from_address) == "natalia.popov@fantazylabz.tech"
+
+
+def test_user_prompt_carries_the_concrete_persona_when_present():
+    from generator_agent.assemble import user_prompt
+
+    prompt = user_prompt(
+        MISSION, {**PROFILE, "persona": {
+            "display_name": "Natalia Popov",
+            "email": "natalia.popov@fantazylabz.tech",
+            "role": "IT Manager",
+        }},
+        "executive_request", "urgent", "medium",
+    )
+    assert "Natalia Popov" in prompt
+    assert "natalia.popov@fantazylabz.tech" in prompt
+    assert "[PERSONA_NAME]" not in prompt
