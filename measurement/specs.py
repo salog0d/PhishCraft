@@ -15,7 +15,8 @@ class CampaignSpec:
     language: str
     seed: int
     model: dict
-    recipient_id: str  # catalog id: int (internal) or persona_id (external)
+    recipient_id: str  # target catalog id: an internal employee (int) — external
+                       # personas are impersonation sources, never recipients
     start_at: str      # ISO-8601 UTC, fixed
     followup_minutes: int
 
@@ -50,7 +51,7 @@ def baseline_specs() -> list[CampaignSpec]:
         s("S5", 25, "it_support", "urgent", "hard", 13),
         s("S6", 41, "password_reset", "neutral", "easy", 42),
         s("S7", 16, "hr_notice", "friendly", "medium", 99),
-        s("S8", "ext-supplier-01", "invoice_payment", "authoritative", "medium", 42),
-        s("S9", "ext-bank-01", "account_suspension", "urgent", "hard", 5),
+        s("S8", 24, "invoice_payment", "authoritative", "medium", 42),
+        s("S9", 40, "account_suspension", "urgent", "hard", 5),
         s("S10", 3, "shared_document", "authoritative", "medium", 42),
     ]
