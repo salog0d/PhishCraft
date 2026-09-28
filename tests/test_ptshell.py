@@ -152,7 +152,7 @@ def test_recipient_sets_and_rejects(shell):
     out = _run(shell, "/recipient 40")
     assert shell.cfg["recipient_id"] == "40"
     out = _run(shell, "/recipient nope")
-    assert "no persona" in out
+    assert "no recipient" in out
 
 
 def test_validate_known_case_catches_the_link_failure(shell):

@@ -47,8 +47,9 @@ generator_content_agent = LlmAgent(
     model=resolve_model(),
     name="generator_content_agent",
     description=(
-        "Emit the 8 content bindings (persona + email subject/body + SMS body) "
-        "for one synthetic recipient."
+        "Emit the 8 content bindings (persona echo + email subject/body + SMS "
+        "body) for one synthetic recipient. The persona is decided by the "
+        "deterministic layer; this agent only echoes it and writes the prose."
     ),
     instruction=CHARTER + BINDINGS_CONTRACT,
     output_key="raw_bindings",

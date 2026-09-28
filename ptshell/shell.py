@@ -61,7 +61,7 @@ COMMANDS: dict[str, str] = {
     "config": "view or set settings (/config, /config <key> [value], /config reset)",
     "model": "set the generation model (/model <id>)",
     "models": "list known model ids",
-    "recipients": "list the persona catalog (12 internal + 2 external)",
+    "recipients": "list the target catalog (12 internal + 3 external personas)",
     "recipient": "set the default recipient (/recipient <id>)",
     "generate": "run the ADK pipeline once; save campaign + report",
     "validate": "run the 4 coherence checks on a campaign file",
@@ -327,8 +327,9 @@ class PtShell:
     def cmd_recipients(self, arg: str) -> None:
         from generator_agent.catalog import load_catalog
 
-        table = Table(title="persona catalog", box=box.SIMPLE_HEAVY,
-                      header_style="bold", expand=False)
+        table = Table(title="target catalog (personas are derived from "
+                            "pretext + recipient)",
+                      box=box.SIMPLE_HEAVY, header_style="bold", expand=False)
         table.add_column("id")
         table.add_column("class")
         table.add_column("org_type")
@@ -358,7 +359,7 @@ class PtShell:
         catalog = load_catalog()
         match = next((p for p in catalog if str(p["id"]) == pid), None)
         if match is None:
-            self._err(f"no persona with id '{pid}' — see /recipients")
+            self._err(f"no recipient with id '{pid}' — see /recipients")
             return
         self.cfg["recipient_id"] = pid
         self._save_cfg()
@@ -396,7 +397,9 @@ class PtShell:
         self.last_campaign = campaign
         self.last_report = report
         self.last_paths = {"campaign": campaign_path, "report": report_path}
-        self.last_recipient = profile_for(spec["recipient_id"])
+        self.last_recipient = profile_for(
+            spec["recipient_id"], pretext=spec["pretext"]
+        )
 
         self._render_campaign(campaign, report)
         self._dim(f"saved: {campaign_path}")

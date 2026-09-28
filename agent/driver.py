@@ -98,7 +98,7 @@ async def _run_async(
     if profile is None:
         from generator_agent.catalog import profile_for
 
-        profile = profile_for(spec["recipient_id"])
+        profile = profile_for(spec["recipient_id"], pretext=spec["pretext"])
 
     last_error: Exception | None = None
     for attempt in range(1, MAX_ATTEMPTS + 1):

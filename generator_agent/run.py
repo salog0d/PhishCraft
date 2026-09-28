@@ -57,7 +57,7 @@ def main() -> None:
 
     mission = _load_mission(args.mission)
     recipient_id = args.recipient_id or _default_recipient_id()
-    profile = profile_for(recipient_id)
+    profile = profile_for(recipient_id, pretext=args.pretext)
     spec = {
         "spec_id": "cli",
         "campaign_id": mission["campaign_id"],

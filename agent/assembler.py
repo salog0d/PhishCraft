@@ -78,6 +78,8 @@ class AssemblerAgent(BaseAgent):
             actual_model=spec.get("model"),
             runtime={"sdk": "google-adk", "adapter": "adk"},
             language=spec.get("language", "en"),
+            # deterministic persona (pretext x recipient), not the model echo
+            persona_override=profile.get("persona"),
         )
         yield Event(
             author=self.name,
