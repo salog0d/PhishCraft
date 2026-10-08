@@ -1,62 +1,62 @@
-### Fine-Tuned Models (5)
+# Model Catalog — cross-family study
 
-These models have been specifically trained on cybersecurity data for red team tasks.
+The generator's `ModelPolicy` requires **≥ 2 model families**, so the
+reliability/reproducibility experiments must run on at least two. This
+catalog lists the candidates and, explicitly, the models that are **ruled
+out**.
 
-#### 1. RavenX-CyberAgent
-- **Model Link:** [deadbydawn101/RavenX-CyberAgent-v6.2-Experimental-GGUF](https://huggingface.co/deadbydawn101/RavenX-CyberAgent-v6.2-Experimental-GGUF) 
-- **Base Model:** `huihui-ai/Huihui-Qwen3.6-35B-A3B-Claude-4.7-Opus-abliterated` 
-- **Key Detail:** A 35B Mixture-of-Experts (MoE) model where only ~3B parameters activate per token. It executes the structured **RATH protocol** for security assessments and is trained on **745,000+** security examples . The recommended quantized version is ~20.7 GB.
-
-#### 2. Pentest-7B (VEXT)
-- **Model Link:** [VextLabsinc/pentest-7b](https://huggingface.co/VextLabsinc/pentest-7b) 
-- **Base Model:** `Qwen/Qwen2.5-7B-Instruct` 
-- **Key Detail:** Trained on **260,000+** curated examples from real pentesting engagements, CTF challenges, and bug bounty programs. Outperforms its base model significantly on security benchmarks (SecBench: 82.4% vs 61.2%) . Designed to parse output from 25+ security tools.
-
-#### 3. BugTraceAI-CORE-G4-Apex
-- **Model Link:** [BugTraceAI/BugTraceAI-Apex-G4-26B-Q4](https://huggingface.co/BugTraceAI/BugTraceAI-Apex-G4-26B-Q4) 
-- **Base Model:** `TrevorJS/gemma-4-26B-A4B-it-uncensored` 
-- **Key Detail:** A 26B MoE model fine-tuned via **DPO** (Direct Preference Optimization) on a dataset of elite HackerOne reports and malware methodologies. Features an injected Opus-style reasoning engine that forces step-by-step analysis . Optimized to run on 12GB VRAM GPUs.
-
-#### 4. Dolphin3-Cyber-8B
-- **Model Link:** [RavichandranJ/Dolphin3-Cyber-8B-GGUF](https://huggingface.co/RavichandranJ/Dolphin3-Cyber-8B-GGUF) 
-- **Base Model:** `huihui-ai/Dolphin3.0-Llama3.1-8B-abliterated` 
-- **Key Detail:** An 8B parameter fine-tune via **LoRA** that is fully uncensored and trained on OWASP Top 10, MITRE ATT&CK, and CVE datasets. Runs efficiently on consumer GPUs with 4GB+ VRAM and is available in 11 quantized versions .
-
-#### 5. Security-SLM (Gemma-4-E2B)
-- **Model Link:** [entrick/Security-SLM-Gemma-4-E2B-it-GGUF](https://huggingface.co/entrick/Security-SLM-Gemma-4-E2B-it-GGUF) 
-- **Base Model:** `google/gemma-4-E2B` 
-- **Key Detail:** Specialized in **AI security** (prompt injection, RAG poisoning, MCP tool poisoning). Trained on 1,000 curated instruction/response pairs. Provides a structured "Reasoning Summary" before its answer, making it suitable for auditing agentic workflows .
+- **Current baseline:** `deepseek/deepseek-chat` (API) — used by the committed
+  measurements.
+- **Cross-family goal:** add at least one **standard open instruct model that
+  runs locally** (no API, reproducible offline, weights auditable).
 
 ---
 
-### Non-Fine-Tuned Foundation Models (5)
+## Candidates — standard instruct models, open weights, local
 
-These are general-purpose models that can be used as a baseline for comparison.
+All are unmodified, openly-licensed instruction-tuned models. They run on a
+single consumer GPU (quantized) or in CPU/RAM for the smallest ones. The final
+pick depends on the machine available — see "Selection" below.
 
-#### 1. Qwen3.6-35B-A3B (Base)
-- **Model Link:** [Qwen/Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)
-- **Base Model:** N/A (This is the foundation for RavenX-CyberAgent)
-- **Key Detail:** A powerful 35B MoE model that can be served via vLLM on Azure. It supports **function calling**, making it suitable for agentic pipelines.
+| Model | Params | Approx. size (bf16 / Q4) | Notes |
+|-------|--------|--------------------------|-------|
+| **Llama 3.1 8B Instruct** (`meta-llama/Llama-3.1-8B-Instruct`) | 8B | ~16 GB / ~5 GB | Strong general instruction-following; the same base as the discarded Dolphin abliteration, without the alignment damage. |
+| **Qwen 2.5 7B Instruct** (`Qwen/Qwen2.5-7B-Instruct`) | 7B | ~15 GB / ~5 GB | Best-in-class at its size for structured output; 14B variant (~30 GB / ~9 GB) if the GPU allows. |
+| **Mistral 7B Instruct v0.3** (`mistralai/Mistral-7B-Instruct-v0.3`) | 7B | ~14 GB / ~4 GB | Third family; runs comfortably in 8 GB VRAM quantized. |
+| *(optional)* **Gemma 2 9B Instruct** (`google/gemma-2-9b-it`) | 9B | ~18 GB / ~6 GB | Google lineage; useful as a fourth family for the comparison matrix. |
 
-#### 2. Gemma 4 (26B)
-- **Model Link:** [google/gemma-4](https://huggingface.co/google/gemma-4)
-- **Base Model:** N/A (This is the foundation for BugTraceAI-CORE-G4-Apex)
-- **Key Detail:** A 26B parameter model from Google that has been "uncensored" variants created from it. Available for deployment on Azure AI Foundry.
+### Selection
 
-#### 3. Llama 3.1 (8B or 70B)
-- **Model Link:** [meta-llama/Llama-3.1-8B](https://huggingface.co/meta-llama/Llama-3.1-8B)
-- **Base Model:** N/A (This is the foundation for Dolphin3-Cyber-8B)
-- **Key Detail:** A popular foundation model that can be deployed in various configurations. Available via Azure AI Foundry.
-
-#### 4. DeepSeek-V3
-- **Model Link:** [deepseek-ai/DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3)
-- **Base Model:** N/A
-- **Key Detail:** Known for its strong reasoning capabilities and has been observed being used for autonomous offensive tasks in the wild. Available via **Azure AI Foundry**.
-
-#### 5. Qwen2.5-7B-Instruct
-- **Model Link:** [Qwen/Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
-- **Base Model:** N/A (This is the foundation for VEXT Pentest-7B)
-- **Key Detail:** The base model used for the VEXT Pentest-7B. Good baseline to compare the effect of fine-tuning on the same architecture.
+1. Check the local hardware first (VRAM if GPU, RAM if CPU-only).
+2. Pick the **largest of these that runs comfortably quantized (Q4_K_M)**
+   on that machine — "the best model your computer can run".
+3. Wire it as the second adapter family next to `deepseek-chat`; record model,
+   quantization, and adapter version in provenance for every run.
 
 ---
 
+## Ruled out — fine-tuned cyber / abliterated-uncensored models
+
+Earlier drafts listed red-team fine-tunes (RavenX-CyberAgent, Pentest-7B,
+BugTraceAI-CORE, Dolphin3-Cyber, Security-SLM) and abliterated/uncensored
+bases. They are **out of scope**, for two independent reasons:
+
+1. **Dual-use review.** A study whose second adapter family is "models
+   fine-tuned on offensive-security corpora" or "models with the safety
+   filter removed" would be rejected in a dual-use review, and rightly so.
+   The pipeline's framing is *authorized simulation content with a
+   deterministic assembler and validator* — nothing about it requires
+   uncensored checkpoints. Curiosity about what they generate is legitimate
+   to note here, but not a reason to adopt them.
+2. **The realism argument does not hold.** An abliterated model is *the same
+   model with its instruction-following alignment degraded* — abliteration
+   measurably costs a little quality rather than adding it. A standard
+   Llama 3.1 / Qwen 2.5 / Mistral instruct, prompted in a research context
+   (as this pipeline already does), generates equally realistic synthetic
+   messages — arguably better, because the base model is intact. "Realism"
+   is not a reason to drop the filter; it is a reason to keep the intact
+   model.
+
+If a comparison against fine-tuned checkpoints is ever wanted, it must be
+justified as a *comparison baseline* and reviewed case by case — it is not a
+default design choice.
