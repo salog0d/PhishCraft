@@ -135,6 +135,22 @@ def test_normalize_body_links_rewrites_stale_tokens():
     assert normalize_body_links(untouched, token) == untouched
 
 
+def test_fix_body_links_reports_the_stale_tokens():
+    """The pre-assembler evidence: which tokens the model actually wrote."""
+    from generator_agent.assemble import fix_body_links
+
+    token = "8b9dc310f705"
+    text = "see sim.fantazylabz.tech/t/abc123 and sim.fantazylabz.tech/t/abc123 again"
+    fixed, replaced = fix_body_links(text, token)
+    assert "abc123" not in fixed
+    assert replaced == ["abc123", "abc123"]
+    # correct tokens and non-tracking urls produce no replacement records
+    _, replaced = fix_body_links(
+        f"see sim.fantazylabz.tech/t/{token} and https://example.com/x", token
+    )
+    assert replaced == []
+
+
 def test_assemble_normalizes_a_stale_sms_link():
     """A model-written 'abc123' in the SMS body is fixed by construction."""
     stale = dict(BINDINGS, SMS_BODY=(
@@ -147,6 +163,28 @@ def test_assemble_normalizes_a_stale_sms_link():
     assert str(token).endswith("8b9dc310f705")
     assert "abc123" not in campaign.messages[1].body
     assert "8b9dc310f705" in campaign.messages[1].body
+
+
+def test_assemble_records_link_fixes_as_raw_evidence():
+    """The stale-token rewrite is logged on the message (raw metric source)."""
+    stale = dict(BINDINGS, SMS_BODY=(
+        "Hi Rebecca, need it today - link: sim.fantazylabz.tech/t/abc123"
+    ))
+    campaign = assemble_campaign(
+        stale, MISSION, PROFILE, "executive_request", "urgent", "medium"
+    )
+    email, sms = campaign.messages
+    assert email.link_fixes == []  # the email bindings were clean
+    assert [f.model_dump() for f in sms.link_fixes] == [
+        {"field": "sms_body", "replaced_token": "abc123"}
+    ]
+
+
+def test_assemble_records_no_link_fixes_when_prose_is_clean():
+    campaign = assemble_campaign(
+        BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium"
+    )
+    assert all(m.link_fixes == [] for m in campaign.messages)
 
 
 # --------------------------------------------------------------------------- #

@@ -24,11 +24,11 @@
   validator (generate → assemble → verify, one-way).
 - **Two channels** — email and SMS (voice is out of scope).
 - **Multi-model adapters** — generate through at least two model families so results are comparable and reproducible across families.
-- **Coherence validators** — a consistent impersonated persona, a coherent send timeline, existing cross-channel references, and link consistency (body links must match the CTA), all enforced in the schema and reported by a deterministic validator.
+- **Coherence validators** — a consistent impersonated persona, a coherent send timeline, existing cross-channel references, link consistency (body links must match the CTA), and sender-recipient separation (the persona never impersonates its own recipient), enforced in the schema and reported by a deterministic validator.
 - **Deterministic persona selection** — the impersonated identity is derived from the `(pretext, recipient)` pair (org chart for executive requests, service desk for IT pretexts, supplier/carrier/bank for BEC pretexts), so the LLM never invents the sender.
 - **Provenance log** — model, parameters, seed, and prompt hash recorded for every artifact.
 - **Synthetic-only data** — the target catalog (12 internal employees + 3 external personas) is generated internally; no external OSINT tools or live collection.
-- **Reproducibility & reliability measurement** — a harness that reruns the same spec with a fixed seed and counts constraint violations across a 10-spec baseline.
+- **Reproducibility & reliability measurement** — a harness that reruns the same spec with a fixed seed and reports two link-consistency numbers over a 10-spec baseline: the **raw (pre-assembler) violation rate** (generator reliability, from the stale tokens the LLM wrote) and the **post-assembler failure rate** (delivery guarantee, by construction 0 for links).
 - **Built-in authorization gate** — every campaign must be attested as authorized before generation runs.
 
 ---
@@ -120,8 +120,8 @@ python -m ptshell
 | `/config [key [value]]` | View or set settings (e.g. `/config seed 7`, `/config pretext invoice_payment`); `/config reset` restores defaults. |
 | `/model <id>` · `/models` | Set or list the generation model (e.g. `deepseek/deepseek-chat`). Model switches apply to the next `/generate`. |
 | `/recipient <id>` · `/recipients` | Set the default recipient or list the target catalog (12 internal + supplier/bank/carrier). |
-| `/generate` | Run the ADK pipeline once with the current settings; prints the campaign + the 4-check validator report and saves both under `data/shell/<campaign_id>/`. |
-| `/validate [campaign.json]` | Run the 4 coherence checks on a campaign file (defaults to the last generated one). |
+| `/generate` | Run the ADK pipeline once with the current settings; prints the campaign + the 5-check validator report and saves both under `data/shell/<campaign_id>/`. |
+| `/validate [campaign.json]` | Run the 5 coherence checks on a campaign file (defaults to the last generated one). |
 | `/measure [--runs=N]` | Run the 10-spec reliability suite and print the failure-rate table (writes `summary.md`). |
 | `/reproduce [all]` | Run the same spec twice and compare (default: spec S1, seed 42). |
 | `/send` | Deliver the last generated campaign to the MailHog sink (`docker compose up -d`). |
@@ -182,7 +182,7 @@ Every file's job, grouped by directory.
 
 | File | What it is / why it matters |
 |------|------------------------------|
-| `validator_agent/validate.py` | The four coherence checks (persona, timing, reference existence, **link consistency**); always emits a `CoherenceReport`, never raises. |
+| `validator_agent/validate.py` | The five coherence checks (persona, timing, reference existence, **link consistency**, **sender-recipient separation**); always emits a `CoherenceReport`, never raises. |
 | `validator_agent/links.py` | URL/token extraction used by the `link_consistency` check. |
 | `validator_agent/__init__.py` | Package marker exposing `validate_campaign`. |
 
@@ -211,7 +211,7 @@ Every file's job, grouped by directory.
 | File | What it is / why it matters |
 |------|------------------------------|
 | `prompts/generator_ag.md` | The content agent's charter (few-shot examples the LLM conditions on). |
-| `prompts/validator_ag.md` | Documentation-parity charter for the 4 checks; the code module is authoritative. |
+| `prompts/validator_ag.md` | Documentation-parity charter for the 5 checks; the code module is authoritative. |
 | `prompts/orchestrator_ag.md` | Non-executable design note: the orchestrator is the ADK `SequentialAgent`. |
 
 ### `docs/` — documentation

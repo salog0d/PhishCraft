@@ -9,6 +9,27 @@
 > [`data/measurements/README.md`](../data/measurements/README.md) for the
 > before/after tables.
 
+> **Review addendum (Oct 2026).** A design review found three problems with
+> the results as they then stood, all resolved on `main`:
+>
+> 1. **The 0/10 `link_consistency` number measured the assembler, not the
+>    model.** After `normalize_body_links` the check cannot fail by
+>    construction. The harness now records every rewrite in the message's
+>    `link_fixes` and reports **two** numbers: the raw pre-assembler violation
+>    rate (generator reliability) and the post-assembler rate (delivery
+>    guarantee).
+> 2. **Provenance logged parameters the call did not use.** Provenance said
+>    temperature 0.7/0.6 while the ADK call uses 0.0; provenance now logs the
+>    real params (see W1.4, amended).
+> 3. **The 4-check suite passed a semantically broken campaign** — a run where
+>    the CEO addressed herself — because no check compared sender against
+>    recipient. A fifth check, `sender_recipient`, was added, and the broken
+>    run is preserved as `known-case/ceo_self_impersonation.json` with a
+>    regression test. What the suite cannot detect is itself a result.
+>
+> Details in [`data/measurements/README.md`](../data/measurements/README.md)
+> and the [bitácora](./bitacora.md).
+
 > **Audience:** an LLM/engineer executing this work with full access to the repo.
 > **Follow the steps in order.** Each step names the files to touch and the
 > acceptance test that proves it is done.
@@ -123,7 +144,7 @@ CampaignSpec / MissionConfig (files, W3)   PersonaCatalog (W5)
    │         │  deterministic token, clock, refs, provenance                  │
    │         ▼  GeneratedCampaign                                             │
    │  3. validator_agent (custom BaseAgent, deterministic)                    │
-   │         │  4 coherence checks                                            │
+   │         │  5 coherence checks                                            │
    │         ▼  CoherenceReport                                               │
    └──────────────────────────────────────────────────────────────────────────┘
                                  │

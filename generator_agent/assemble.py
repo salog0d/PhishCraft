@@ -140,17 +140,34 @@ def landing_url_for(mission_config: dict, profile: dict) -> str:
     return f"https://sim.{domain}/t/{token}"
 
 
-_TOKEN_IN_LINK = re.compile(r"(sim\.[A-Za-z0-9.-]+/t/)[A-Za-z0-9_-]+")
+_TOKEN_IN_LINK = re.compile(r"(sim\.[A-Za-z0-9.-]+/t/)([A-Za-z0-9_-]+)")
 
 
-def normalize_body_links(text: str, token: str) -> str:
+def fix_body_links(text: str, token: str) -> tuple[str, list[str]]:
     """Rewrite any tracking token written into prose to the campaign token.
 
     The model writes free-form bodies and may copy a stale token from its
     few-shot examples; this makes the link consistent by construction, the
     same way persona/ids/schedule already are.
+
+    Returns ``(fixed_text, replaced_tokens)`` — the tokens the model actually
+    wrote. ``replaced_tokens`` is the raw pre-assembler evidence: any message
+    with a non-empty list had a link-consistency violation in the LLM's output
+    *before* normalization.
     """
-    return _TOKEN_IN_LINK.sub(lambda m: f"{m.group(1)}{token}", text)
+    replaced: list[str] = []
+
+    def _sub(m: re.Match) -> str:
+        if m.group(2) != token:
+            replaced.append(m.group(2))
+        return f"{m.group(1)}{token}"
+
+    return _TOKEN_IN_LINK.sub(_sub, text), replaced
+
+
+def normalize_body_links(text: str, token: str) -> str:
+    """Legacy convenience: the fixed text only (ignores the replacement log)."""
+    return fix_body_links(text, token)[0]
 
 
 def user_prompt(
@@ -292,9 +309,19 @@ def assemble_campaign(
     cta = {"type": cta_type, "landing_url": landing_url, "button_label": cta_label}
 
     # Normalize any stale token the model copied into prose (W: link fix).
-    email_subject = normalize_body_links(b["EMAIL_SUBJECT"], token)
-    email_body = normalize_body_links(b["EMAIL_BODY"], token)
-    sms_body = normalize_body_links(b["SMS_BODY"], token)
+    # Each rewrite is recorded per message as `link_fixes` — the raw,
+    # pre-assembler link-consistency evidence that the reliability harness
+    # reports next to the (by-construction) post-assembler guarantee.
+    email_subject, subject_fixes = fix_body_links(b["EMAIL_SUBJECT"], token)
+    email_body, email_fixes = fix_body_links(b["EMAIL_BODY"], token)
+    sms_body, sms_fixes = fix_body_links(b["SMS_BODY"], token)
+
+    def link_fixes_for(*pairs: tuple[str, list[str]]) -> list[dict]:
+        return [
+            {"field": field, "replaced_token": stale}
+            for field, replaced in pairs
+            for stale in replaced
+        ]
 
     model = actual_model or mission_config["model_policy"]["models"][0]
     runtime_info = runtime or {"sdk": "google-adk"}
@@ -326,6 +353,9 @@ def assemble_campaign(
             "body": email_body,
             "call_to_action": cta,
             "references": [],
+            "link_fixes": link_fixes_for(
+                ("email_subject", subject_fixes), ("email_body", email_fixes)
+            ),
             "provenance": provenance(
                 "tpl-0001",
                 {"temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": seed},
@@ -339,6 +369,7 @@ def assemble_campaign(
             "body": sms_body,  # no subject, by construction
             "call_to_action": cta,
             "references": ["msg-0001"],  # the cited id exists, by construction
+            "link_fixes": link_fixes_for(("sms_body", sms_fixes)),
             "provenance": provenance(
                 "tpl-0002",
                 {"temperature": 0.6, "top_p": 1.0, "max_tokens": 256, "seed": seed},

@@ -28,7 +28,7 @@ The pipeline is a **Google ADK** agent graph — a linear, non-autonomous
 |-------|------|----------------|
 | `generator_content_agent` | ADK `LlmAgent` | Writes content bindings (persona echo + email subject/body + SMS body) in the requested tone/difficulty/language. |
 | `assembler_agent` | ADK `BaseAgent` (deterministic) | Builds the `GeneratedCampaign`: ids, persona (deterministically selected per pretext × recipient), seed-derived tracking link, schedule, references, provenance. |
-| `validator_agent` | ADK `BaseAgent` (deterministic) | Runs the four coherence checks (persona, timing, reference existence, link consistency) and emits the `CoherenceReport`. |
+| `validator_agent` | ADK `BaseAgent` (deterministic) | Runs the five coherence checks (persona, timing, reference existence, link consistency, sender-recipient separation) and emits the `CoherenceReport`. |
 
 See [architecture.md](./architecture.md) for the full pipeline, per-phase outputs,
 and the stage communication diagram.
@@ -40,7 +40,7 @@ and the stage communication diagram.
 ```
 Phase 0  Config                     → MissionConfig + CampaignSpec + PersonaCatalog (seeded into ADK state)
 Phase 1  Generation  (Generator-AG) → GeneratedCampaign (email + SMS) with provenance
-Phase 2  Verification (Validator-AG) → CoherenceReport (4 checks) + ProvenanceLog
+Phase 2  Verification (Validator-AG) → CoherenceReport (5 checks) + ProvenanceLog
 Phase 3  Measurement (harness)      → reproducibility.json + reliability.json + summary.md
 ```
 

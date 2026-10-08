@@ -64,7 +64,7 @@ COMMANDS: dict[str, str] = {
     "recipients": "list the target catalog (12 internal + 3 external personas)",
     "recipient": "set the default recipient (/recipient <id>)",
     "generate": "run the ADK pipeline once; save campaign + report",
-    "validate": "run the 4 coherence checks on a campaign file",
+    "validate": "run the 5 coherence checks on a campaign file",
     "measure": "run the 10-spec reliability suite (writes summary.md)",
     "reproduce": "run the same spec twice and compare (default: S1)",
     "send": "deliver the last generated campaign to MailHog",
@@ -444,11 +444,19 @@ class PtShell:
 
         n_ok = payload["n_runs"] - payload["n_generation_errors"]
         headline = Text()
-        headline.append("campaigns with ≥ 1 violation: ", style="bold")
+        headline.append("post-assembler violations (delivery guarantee): ", style="bold")
         headline.append(f"{payload['n_campaigns_with_violation']}/{n_ok}",
                         style="bold red" if payload["n_campaigns_with_violation"]
                         else "bold green")
-        headline.append(f"   (failure rate {payload['failure_rate']})")
+        headline.append(f"   (failure rate {payload['failure_rate']})\n")
+        headline.append("raw LLM link violations (generator reliability): ", style="bold")
+        headline.append(f"{payload['n_campaigns_with_raw_link_violation']}/{n_ok}",
+                        style="bold red"
+                        if payload["n_campaigns_with_raw_link_violation"]
+                        else "bold green")
+        headline.append(
+            f"   (raw rate {payload['raw_link_violation_rate']})"
+        )
         self._panel(headline, f"reliability · {payload['adapter']} · "
                               f"{payload['model']}")
 

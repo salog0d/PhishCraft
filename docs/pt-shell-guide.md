@@ -76,7 +76,7 @@ pt> /generate            # call the model, build + validate the campaign
 
 - a **campaign panel** — persona, EMAIL/SMS messages with subjects, bodies,
   and the seed-derived tracking link;
-- a **validator report** — the four coherence checks with `✓ PASS` / `✗ FAIL`
+- a **validator report** — the five coherence checks with `✓ PASS` / `✗ FAIL`
   badges and the `all_passed` verdict;
 - the paths where the campaign and report were saved
   (`data/shell/<campaign_id>/` by default).
@@ -95,7 +95,7 @@ pt> /generate            # call the model, build + validate the campaign
 | `/recipients` | Table of the target catalog (12 internal + supplier/bank/carrier). |
 | `/recipient <id>` | Set the default simulation target. The impersonated persona is derived automatically from the pretext + target (e.g. `executive_request` → the target's manager). |
 | `/generate` | One ADK pipeline run: generate → assemble → validate. |
-| `/validate [file.json]` | Run the 4 coherence checks on a campaign file (defaults to the last generated campaign). |
+| `/validate [file.json]` | Run the 5 coherence checks on a campaign file (defaults to the last generated campaign). |
 | `/measure [--runs=N]` | Run the 10-spec reliability suite; prints the failure-rate summary. |
 | `/reproduce [all]` | Run the same spec twice and compare (default: spec S1, seed 42). |
 | `/send` | Deliver the last campaign to the local MailHog inbox. |
@@ -174,9 +174,12 @@ no network, no key. Ideal for demos, CI, and learning the commands.
   are **identical** and whether the **deterministic layer** (ids, persona,
   URLs, references, schedule, provenance) matched.
 - **`/measure`** writes `data/measurements/reliability-<adapter>-<timestamp>/`:
-  `reliability.json` (machine-readable) and `summary.md` — the failure-rate
-  table broken down by coherence check. **This failure rate is the project's
-  headline result.**
+  `reliability.json` (machine-readable) and `summary.md` with **two**
+  link-consistency numbers: the **raw (pre-assembler) violation rate** — the
+  generator's *reliability* metric, from the stale tokens the LLM wrote before
+  the assembler normalized them — and the **post-assembler failure rate**
+  across all five checks, the *delivery guarantee* of the delivered artifact.
+  **Both go in the paper; they are not the same thing.**
 
 Both also exist as plain CLIs (no shell needed):
 

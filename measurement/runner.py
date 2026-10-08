@@ -18,6 +18,7 @@ class RunRecord:
     status: str  # "ok" | "generation_error"
     campaign_hash: str | None = None
     failing_checks: list = field(default_factory=list)
+    raw_link_violations: int = 0  # stale tokens the LLM wrote, pre-assembler
     report: dict | None = None
     error: str | None = None
     duration_ms: int = 0
@@ -33,14 +34,16 @@ def canonical_hash(campaign) -> str:
 def deterministic_layer_hash(campaign) -> str:
     """Hash of the campaign with the stochastic (LLM-written) fields blanked.
 
-    The deterministic layer — ids, persona, URLs, references, schedule,
-    provenance — must reproduce byte-for-byte; only subject/body (and the
-    timestamps that capture them) are allowed to differ.
+    The deterministic layer — ids, persona, recipient, URLs, references,
+    schedule, provenance — must reproduce byte-for-byte; only subject/body
+    (and the fields that capture them: generated_at, adapter_latency_ms,
+    link_fixes) are allowed to differ.
     """
     data = campaign.model_dump(mode="json")
     for m in data["messages"]:
         m["subject"] = None
         m["body"] = None
+        m["link_fixes"] = None
         m["provenance"]["generated_at"] = None
         m["provenance"]["adapter_latency_ms"] = None
     dumped = json.dumps(data, sort_keys=True, separators=(",", ":"))
@@ -71,6 +74,9 @@ def run_spec(spec, adapter, run_index: int, mission: dict) -> RunRecord:
         status="ok",
         campaign_hash=canonical_hash(campaign),
         failing_checks=[r.check.value for r in report.results if not r.passed],
+        # Raw (pre-assembler) link violations: the assembler logged every stale
+        # token it normalized into the message's link_fixes.
+        raw_link_violations=sum(len(m.link_fixes) for m in campaign.messages),
         report=report.model_dump(),
         duration_ms=int((time.perf_counter() - start) * 1000),
     )

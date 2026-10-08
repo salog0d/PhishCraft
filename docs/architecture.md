@@ -39,7 +39,7 @@ pipeline measurable for reproducibility.
 |-------|------|----------------|
 | `generator_content_agent` | ADK `LlmAgent` | Emits the 8 content bindings (persona echo + email subject/body + SMS body) in the requested tone/difficulty/language. Writes nothing structural; the persona it echoes is ignored — the deterministic layer picks it. |
 | `assembler_agent` | ADK `BaseAgent` (deterministic) | Builds the `GeneratedCampaign`: ids, persona stamping (the identity derived from `pretext × recipient` via `catalog.persona_for`), seed-derived tracking URL, spec-derived schedule, references, and provenance are all decided in code. |
-| `validator_agent` | ADK `BaseAgent` (deterministic) | Runs the four coherence checks and emits the `CoherenceReport`. |
+| `validator_agent` | ADK `BaseAgent` (deterministic) | Runs the five coherence checks and emits the `CoherenceReport`. |
 
 ### Core building blocks
 
@@ -63,6 +63,14 @@ pipeline measurable for reproducibility.
      of a message it references), and a follow-up must carry the same tracking
      token as the message it cites. This is the check that catches the known
      cross-channel failure (`abc123` vs `d6db8064874a`) in the committed sample.
+     Since the assembler normalizes stale tokens, this check can no longer fail
+     by construction — it is the **delivery guarantee**, not the reliability
+     metric (see below).
+   - **Sender vs recipient** — the impersonated persona must never be the
+     campaign's own recipient (no CEO writing to herself); campaigns without a
+     recorded recipient fail this check. Added after a run of S1 produced
+     exactly that broken campaign and the 4-check suite passed it — knowing
+     what the suite does *not* detect is part of the result.
 3. **Provenance log.** `GenerationProvenance` / `ProvenanceLog` capture the
    model, decoding parameters, seed, prompt template id, and prompt hash for
    each artifact, so every generation is reproducible.
@@ -87,14 +95,18 @@ pipeline measurable for reproducibility.
   selected persona into the campaign and every sender.
 
 ### Phase 2 — Verification (`validator_agent`)
-- The deterministic validator runs the four coherence checks and emits a
+- The deterministic validator runs the five coherence checks and emits a
   `CoherenceReport`; failures are recorded, never raised.
 
 ### Phase 3 — Measurement (harness, drives the ADK `Runner`)
 - `measurement/reproduce.py` runs the same spec twice and compares (content
   hash and deterministic-layer hash).
-- `measurement/reliability.py` runs the 10-spec baseline and counts constraint
-  violations per check; the failure rate is the paper's first result.
+- `measurement/reliability.py` runs the 10-spec baseline and reports **two**
+  link-consistency numbers: the **raw (pre-assembler) violation rate** —
+  derived from each message's `link_fixes`, i.e. what the LLM wrote before
+  normalization — which is the generator's *reliability* metric, and the
+  **post-assembler failure rate** across all five checks, which is the
+  *delivery guarantee* of the fixed artifact.
 
 ---
 

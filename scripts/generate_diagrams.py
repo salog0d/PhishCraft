@@ -286,7 +286,7 @@ def diagram_5_measurement() -> str:
              shape="box", fillcolor="#F4ECF7", color=PALETTE["content"],
              fontcolor="#1B2631")
 
-    dot.node("summary", "summary.md\nfailure rate = first result",
+    dot.node("summary", "summary.md\nraw link rate (reliability)\n+ post rate (guarantee)",
              shape="box", fillcolor="#FDEDEC", color=PALETTE["evidence"],
              fontcolor="#1B2631")
 

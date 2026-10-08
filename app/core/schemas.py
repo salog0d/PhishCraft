@@ -331,6 +331,25 @@ class PhishingGenerationResponse(BaseModel):
     message: str = "Generation request accepted."
 
 
+class LinkFix(BaseModel):
+    """One tracking-token rewrite the assembler applied to model prose.
+
+    The raw pre-assembler link-consistency metric is derived from these: a
+    message with any ``link_fixes`` had a link the LLM wrote that did not
+    match the campaign's tracking token before normalization.
+    """
+
+    field: str = Field(
+        ...,
+        description="The prose field the stale token appeared in: "
+                    "email_subject | email_body | sms_body.",
+    )
+    replaced_token: str = Field(
+        ...,
+        description="The tracking token the model actually wrote (stale).",
+    )
+
+
 class GeneratedMessage(BaseModel):
     """One message produced by the generator, with its provenance attached."""
 
@@ -344,6 +363,14 @@ class GeneratedMessage(BaseModel):
     references: list[MessageId] = Field(
         default_factory=list,
         description="Ids of earlier messages this one refers to (cross-channel).",
+    )
+    link_fixes: list[LinkFix] = Field(
+        default_factory=list,
+        description=(
+            "Tracking-token rewrites the assembler applied to the LLM's raw "
+            "prose. Empty means the model wrote no stale link token; this is "
+            "the evidence behind the raw (pre-assembler) reliability metric."
+        ),
     )
     provenance: GenerationProvenance
 

@@ -5,8 +5,20 @@
 
 Aggregates over every spec x run: how many campaigns violate at least one
 coherence constraint, broken down by check. Writes ``<out>/reliability.json``
-and a human-readable ``<out>/summary.md`` — the failure rate is the paper's
-first result. The interactive shell calls ``run()`` directly.
+and a human-readable ``<out>/summary.md``.
+
+Two link-consistency numbers are reported, and they measure different things:
+
+- **Raw (pre-assembler) violation rate** — from each message's ``link_fixes``,
+  the stale tokens the LLM actually wrote before the assembler normalized
+  them. This is the generator's *reliability* metric. Normalization never
+  triggers a retry, so this is the first-attempt output.
+- **Post-assembler violation rate** (``failure_rate``) — the validator's
+  ``link_consistency`` check on the delivered artifact. By construction this
+  is 0 after the normalization fix: it is the *delivery guarantee*, not the
+  reliability metric.
+
+The interactive shell calls ``run()`` directly.
 """
 
 from __future__ import annotations
@@ -71,6 +83,7 @@ def run(
     violation_counts = Counter(
         check for r in ok for check in r.failing_checks
     )
+    n_raw = sum(1 for r in ok if r.raw_link_violations > 0)
 
     payload = {
         "adapter": adapter.name,
@@ -82,6 +95,12 @@ def run(
         "failure_rate": (
             round(n_with_violation / len(ok), 4) if ok else None
         ),
+        # Raw link-consistency (LLM output before the assembler normalized it)
+        # is the generator's reliability metric; failure_rate above is the
+        # post-assembler delivery guarantee.
+        "n_campaigns_with_raw_link_violation": n_raw,
+        "raw_link_violation_rate": (round(n_raw / len(ok), 4) if ok else None),
+        "total_raw_link_violations": sum(r.raw_link_violations for r in ok),
         "violation_counts": {c: violation_counts.get(c, 0) for c in CHECKS},
         "per_spec": [
             {
@@ -91,6 +110,7 @@ def run(
                 "status": r.status,
                 "campaign_hash": r.campaign_hash,
                 "failing_checks": r.failing_checks,
+                "raw_link_violations": r.raw_link_violations,
                 "error": r.error,
                 "duration_ms": r.duration_ms,
             }
@@ -108,10 +128,22 @@ def run(
         f"- adapter: `{payload['adapter']}` · model: `{payload['model']}`",
         f"- specs: {payload['n_specs']} · runs: {payload['n_runs']} · "
         f"generation errors: {payload['n_generation_errors']}",
-        f"- **campaigns with ≥ 1 violation: {payload['n_campaigns_with_violation']}"
-        f"/{len(ok)} (failure rate {payload['failure_rate']})**",
         "",
-        "## Violations by coherence check",
+        "## Two link-consistency numbers",
+        "",
+        f"- **Raw (pre-assembler) violations — generator reliability:** "
+        f"{payload['n_campaigns_with_raw_link_violation']}/{len(ok)} campaigns "
+        f"({payload['raw_link_violation_rate']}); "
+        f"{payload['total_raw_link_violations']} stale tokens total. "
+        f"Counted from each message's `link_fixes`, i.e. the LLM's output "
+        f"before normalization and before any retry.",
+        f"- **Post-assembler violations — delivery guarantee:** "
+        f"{payload['n_campaigns_with_violation']}/{len(ok)} campaigns "
+        f"(failure rate {payload['failure_rate']}). By construction this is 0 "
+        f"for `link_consistency` after the normalization fix; it measures the "
+        f"delivered artifact, not the model.",
+        "",
+        "## Violations by coherence check (post-assembler artifact)",
         "",
         "| check | violations |",
         "|---|---|",
@@ -122,13 +154,14 @@ def run(
         "",
         "## Per-spec results",
         "",
-        "| spec | run | seed | status | failing checks |",
-        "|---|---|---|---|---|",
+        "| spec | run | seed | status | failing checks | raw link violations |",
+        "|---|---|---|---|---|---|",
     ]
     for r in records:
         lines.append(
             f"| {r.spec_id} | {r.run_index} | {r.seed} | {r.status} | "
-            f"{', '.join(r.failing_checks) or '—'} |"
+            f"{', '.join(r.failing_checks) or '—'} | "
+            f"{r.raw_link_violations} |"
         )
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
