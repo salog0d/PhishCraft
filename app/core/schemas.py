@@ -62,7 +62,12 @@ class Channel(str, Enum):
 
 
 class Pretext(str, Enum):
-    """The social-engineering scenario the message is built around."""
+    """The social-engineering scenario the message is built around.
+
+    Pretexts are tagged by :class:`PretextCategory` so consumer-brand lures
+    (password reset, account suspension, package delivery) are kept separate
+    from business/enterprise lures (BEC: executive request, invoice payment,
+    shared document, HR notice, IT support)."""
 
     PASSWORD_RESET = "password_reset"
     INVOICE_PAYMENT = "invoice_payment"
@@ -72,6 +77,33 @@ class Pretext(str, Enum):
     EXECUTIVE_REQUEST = "executive_request"
     SHARED_DOCUMENT = "shared_document"
     ACCOUNT_SUSPENSION = "account_suspension"
+
+    @property
+    def category(self) -> "PretextCategory":
+        return PRETEXT_CATEGORY[self]
+
+
+class PretextCategory(str, Enum):
+    """Coarse scenario family: consumer-brand phishing vs BEC/enterprise."""
+
+    CONSUMER = "consumer"
+    BEC = "bec"
+
+
+PRETEXT_CATEGORY = {
+    # Consumer-brand lures: a brand (bank / carrier / service) asking the
+    # recipient to act on their personal account or parcel.
+    Pretext.PASSWORD_RESET: PretextCategory.CONSUMER,
+    Pretext.ACCOUNT_SUSPENSION: PretextCategory.CONSUMER,
+    Pretext.PACKAGE_DELIVERY: PretextCategory.CONSUMER,
+    # BEC / enterprise lures: an authority inside (or supplying) the company
+    # asking an employee to act on business money, documents, or accounts.
+    Pretext.EXECUTIVE_REQUEST: PretextCategory.BEC,
+    Pretext.INVOICE_PAYMENT: PretextCategory.BEC,
+    Pretext.SHARED_DOCUMENT: PretextCategory.BEC,
+    Pretext.HR_NOTICE: PretextCategory.BEC,
+    Pretext.IT_SUPPORT: PretextCategory.BEC,
+}
 
 
 class CallToActionType(str, Enum):

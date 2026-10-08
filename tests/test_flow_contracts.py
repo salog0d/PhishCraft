@@ -259,6 +259,22 @@ def test_campaign_carries_the_simulation_target():
     assert campaign.recipient.full_name == "Rajesh Kapoor"
 
 
+# --- Point: pretexts separate consumer lures from BEC -------------------- #
+
+
+def test_pretexts_are_tagged_by_scenario_category():
+    consumer = {fc.Pretext.PASSWORD_RESET, fc.Pretext.ACCOUNT_SUSPENSION,
+                fc.Pretext.PACKAGE_DELIVERY}
+    bec = {fc.Pretext.EXECUTIVE_REQUEST, fc.Pretext.INVOICE_PAYMENT,
+           fc.Pretext.SHARED_DOCUMENT, fc.Pretext.HR_NOTICE,
+           fc.Pretext.IT_SUPPORT}
+    assert set(fc.Pretext) == consumer | bec
+    for pretext in consumer:
+        assert pretext.category is fc.PretextCategory.CONSUMER
+    for pretext in bec:
+        assert pretext.category is fc.PretextCategory.BEC
+
+
 # --------------------------------------------------------------------------- #
 # Persistence rules (every contract carries a storage policy)
 # --------------------------------------------------------------------------- #

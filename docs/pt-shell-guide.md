@@ -129,7 +129,7 @@ Unknown keys and invalid values are rejected with the valid options listed.
 | Key | Default | Valid values / notes |
 |---|---|---|
 | `model` | `deepseek/deepseek-chat` | any ADK model id (see §6) |
-| `pretext` | `executive_request` | `password_reset`, `invoice_payment`, `package_delivery`, `it_support`, `hr_notice`, `executive_request`, `shared_document`, `account_suspension` |
+| `pretext` | `executive_request` | consumer: `password_reset`, `account_suspension`, `package_delivery` · BEC: `executive_request`, `invoice_payment`, `shared_document`, `hr_notice`, `it_support` |
 | `tone` | `urgent` | `urgent`, `friendly`, `authoritative`, `neutral` |
 | `difficulty` | `medium` | `easy`, `medium`, `hard` |
 | `language` | `en` | BCP-47-ish locale, e.g. `en`, `es-MX` |
