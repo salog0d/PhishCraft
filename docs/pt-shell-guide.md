@@ -147,7 +147,7 @@ Unknown keys and invalid values are rejected with the valid options listed.
 
 | Model id | Needs | Notes |
 |---|---|---|
-| `deepseek/deepseek-chat` | `DEEPSEEK_API_KEY` | **default**; temperature 0 |
+| `deepseek/deepseek-chat` | `DEEPSEEK_API_KEY` | **default**; runs at temperature 0.0 (the value provenance logs); the seed drives the deterministic layer and is not passed to the provider |
 | `deepseek/deepseek-reasoner` | `DEEPSEEK_API_KEY` | reasoning variant |
 | `gemini-2.5-flash` | `GOOGLE_API_KEY` | Gemini via ADK |
 | `anthropic/claude-opus-5` | `ANTHROPIC_API_KEY` | via LiteLlm |

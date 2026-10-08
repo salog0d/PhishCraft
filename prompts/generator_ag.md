@@ -59,7 +59,7 @@ URL are placeholders — replace them with the values from the user message.
   "references": [],
   "provenance": {
     "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
-    "params": { "temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
+    "params": { "temperature": 0.0, "seed": 42 },
     "prompt_template_id": "tpl-0001",
     "prompt_hash": "11c15b4d54820c0c62611e5c762fcd37534114d40b4a1ed54c07bad741a7cfa0",
     "generated_at": "2026-08-20T09:00:00Z",
@@ -81,7 +81,7 @@ URL are placeholders — replace them with the values from the user message.
   "references": ["msg-0001"],
   "provenance": {
     "model": { "family": "openai", "name": "gpt-4.1", "adapter_version": "1.0" },
-    "params": { "temperature": 0.6, "top_p": 1.0, "max_tokens": 256, "seed": 42 },
+    "params": { "temperature": 0.0, "seed": 42 },
     "prompt_template_id": "tpl-0002",
     "prompt_hash": "64d4bebb8a66f720706baa0c41fadd90bf076e23529861d0a014206ef7540843",
     "generated_at": "2026-08-20T10:15:00Z",
@@ -209,7 +209,7 @@ def generator_ag(
             "references": [],
             "provenance": provenance(
                 "tpl-0001",
-                {"temperature": 0.7, "top_p": 1.0, "max_tokens": 1024, "seed": seed},
+                {"temperature": 0.0, "seed": seed},
             ),
         },
         {
@@ -226,7 +226,7 @@ def generator_ag(
             "references": ["msg-0001"],  # by construction — the cited id exists
             "provenance": provenance(
                 "tpl-0002",
-                {"temperature": 0.6, "top_p": 1.0, "max_tokens": 256, "seed": seed},
+                {"temperature": 0.0, "seed": seed},
             ),
         },
     ]

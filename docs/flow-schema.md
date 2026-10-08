@@ -183,12 +183,12 @@ not carry one (and is capped at 1600 characters).
   "references": [],
   "provenance": {
     "model": { "family": "deepseek", "name": "deepseek-chat", "adapter_version": "1.0" },
-    "params": { "temperature": 0.0, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
+    "params": { "temperature": 0.0, "seed": 42 },
     "prompt_template_id": "tpl-0001",
     "prompt_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "generated_at": "2026-08-20T09:00:00Z",
     "adapter_latency_ms": 812,
-    "runtime": { "sdk": "google-adk" }
+    "runtime": { "sdk": "google-adk", "seed_supported": "false" }
   }
 }
 ```
@@ -196,7 +196,9 @@ not carry one (and is capped at 1600 characters).
 | Field | Type | Notes |
 |-------|------|-------|
 | `references` | MessageId[] | Ids of earlier messages this one cites (cross-channel). |
+| `link_fixes` | LinkFix[] | Stale tracking tokens the assembler rewrote in the raw model prose; empty = no raw link violation. Feeds the raw (pre-assembler) reliability metric. |
 | `provenance.prompt_hash` | sha256 hex | sha256 of the fully rendered prompt actually sent. |
+| `provenance.params` | GenerationParams | The params **actually used** by the model call: `temperature: 0.0` (passed via ADK/LiteLlm) and the reproducibility `seed`. `top_p`/`max_tokens` are left at provider defaults and therefore not logged; the seed drives the deterministic layer only and is not passed to the provider (`runtime.seed_supported: false`). |
 
 ---
 
@@ -240,6 +242,12 @@ the recipient's manager, `invoice_payment` → the external supplier).
     "email": "ceo@fantazylabz.tech",
     "role": "Chief Executive Officer"
   },
+  "recipient": {
+    "email": "rebecca.stern@fantazylabz.tech",
+    "full_name": "Rebecca Stern",
+    "role": "Staff Accountant",
+    "department": "Finance"
+  },
   "messages": [
     { "message_id": "msg-0001", "channel": "email", "scheduled_at": "2026-08-20T09:00:00Z", "...": "..." },
     { "message_id": "msg-0002", "channel": "sms", "scheduled_at": "2026-08-20T10:15:00Z", "references": ["msg-0001"], "...": "..." }
@@ -260,7 +268,14 @@ the recipient's manager, `invoice_payment` → the external supplier).
   it references), and a follow-up must carry the same tracking token as the
   message it cites. This is the check that catches the known cross-channel
   failure in the committed sample (`msg-0002` body token `abc123` ≠ CTA token
-  `d6db8064874a`).
+  `d6db8064874a`). Because the assembler normalizes stale tokens, this check
+  cannot fail by construction anymore — it is the *delivery guarantee*; the
+  raw pre-assembler violation rate (from each message's `link_fixes`) is the
+  *reliability* metric.
+- **Sender vs recipient** — the impersonated persona must never be the
+  campaign's own recipient (no CEO writing to herself); campaigns without a
+  recorded `recipient` fail this check because the separation cannot be
+  verified.
 
 ---
 
@@ -278,7 +293,8 @@ satisfied its constraints.
     { "check": "timing", "passed": true },
     { "check": "cross_channel_reference", "passed": true },
     { "check": "link_consistency", "passed": false,
-      "detail": "msg-0002 body token 'abc123' not in CTA tokens (d6db8064874a)" }
+      "detail": "msg-0002 body token 'abc123' not in CTA tokens (d6db8064874a)" },
+    { "check": "sender_recipient", "passed": true }
   ],
   "all_passed": false
 }
@@ -303,7 +319,7 @@ generated message.
   "entries": [
     {
       "model": { "family": "deepseek", "name": "deepseek-chat", "adapter_version": "1.0" },
-      "params": { "temperature": 0.0, "top_p": 1.0, "max_tokens": 1024, "seed": 42 },
+      "params": { "temperature": 0.0, "seed": 42 },
       "prompt_template_id": "tpl-0001",
       "prompt_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "generated_at": "2026-08-20T09:00:00Z"
@@ -334,8 +350,8 @@ Enforced by Pydantic v2 models in
 - **Channel shaping.** `channels ⊆ {email, sms}`; email requires a `subject`,
   SMS forbids one; `subject_hint`/`include_tracking_pixel` are email-only.
 - **Coherence.** The validator enforces persona identity, cross-channel
-  reference existence, timing, and link consistency; `CoherenceReport` must be
-  internally consistent.
+  reference existence, timing, link consistency, and sender-recipient
+  separation; `CoherenceReport` must be internally consistent.
 - **Referential integrity.** Prefixed ids (`msg-`, `bat-`) are unique within a
   collection.
 

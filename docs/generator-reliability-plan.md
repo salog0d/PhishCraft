@@ -269,6 +269,16 @@ you deliberately wrap it as a custom ADK model.
   content-level reproducibility is **not guaranteed by the provider** (that fact
   is itself a result).
 
+> **Amendment (Oct 2026 review).** The first build hardcoded provenance params
+> of `0.7` (email) / `0.6` (SMS) while the actual ADK call ran at `0.0` — the
+> log did not match the call. Provenance now records the params actually used:
+> `{"temperature": 0.0, "seed": <seed>}` (top_p/max_tokens at provider
+> defaults, not logged), and `runtime.seed_supported = false` because the seed
+> drives the deterministic layer only and is not passed to the provider.
+> Measured consequence: the deterministic layer is byte-identical across runs
+> while the LLM prose varies slightly between calls **even at temperature 0** —
+> the nondeterminism comes from the provider, not from this codebase.
+
 **Acceptance W1**
 - `pytest -q tests/test_generator_agent.py` green.
 - New test: `assemble_campaign(..., generated_at=FIXED, scheduled=(...) )` run
