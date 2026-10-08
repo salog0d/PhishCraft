@@ -1,0 +1,118 @@
+# Bitácora — cuaderno de laboratorio
+
+> Cuaderno personal del proyecto. Se lleva en español por elección del autor
+> (el resto del repo sigue la convención en inglés). Entradas en orden
+> cronológico; los hallazgos se registran con fecha, evidencia y estado.
+
+## 2026-10-08 — Revisión de diseño: tres resultados que no median lo que parecían
+
+Revisión del mentor sobre los resultados centrales. Resumen y resolución:
+
+### H1 · El 0/10 de `link_consistency` medía el ensamblador, no el modelo
+
+- **Qué pasaba:** `normalize_body_links` reescribe cualquier token del cuerpo
+  al token correcto, así que el check no puede fallar por construcción. El
+  0/10 "after" es una garantía de entrega, no una métrica del LLM.
+- **Qué se hizo:** el ensamblador ahora registra cada reescritura en
+  `link_fixes` de cada mensaje; el harness reporta **dos números**:
+  - *raw (pre-ensamblador)* = tasa de violación del LLM crudo → métrica de
+    **fiabilidad del generador** (primer intento; la normalización no dispara
+    reintentos);
+  - *post-ensamblador* = tasa de fallo del artefacto entregado → **garantía
+    de entrega** (0 por construcción para links).
+- **Pendiente:** las corridas históricas (2026-09-23) no grabaron
+  `link_fixes`; hay que **re-correr la suite con el adapter real** para
+  obtener el número raw. Ambos van al paper, no son lo mismo.
+- Commits: `feat(measure): report raw pre-assembler link violations…`,
+  `fix(provenance): log the sampling params actually used…`.
+
+### H2 · La afirmación de reproducibilidad no cuadraba con la procedencia
+
+- **Qué pasaba:** los docs decían temperatura 0 (y la llamada real **sí** usa
+  0.0 vía `LiteLlm`), pero cada registro de procedencia logueaba 0.7 (email)
+  y 0.6 (SMS): el log mentía.
+- **Qué se hizo:** procedencia registra los params realmente usados
+  `{"temperature": 0.0, "seed": 42}` (`top_p`/`max_tokens` quedan en defaults
+  del proveedor y no se loguean); `runtime.seed_supported = false` porque el
+  seed solo alimenta la capa determinista y **no se pasa al proveedor**.
+- **Hallazgo del experimento de reproducibilidad (se mantiene):** la capa
+  determinista es byte-idéntica entre corridas; la prosa del LLM varía
+  ligeramente entre llamadas **incluso a temperatura 0**. El no-determinismo
+  viene del proveedor, no del código.
+- Commits: `fix(provenance): log the sampling params actually used…`.
+
+### H3 · Una campaña semánticamente rota pasó los 4 checks
+
+- **Qué pasaba:** la corrida S1 de `reproduce-adk/` tiene a la CEO
+  escribiéndose a sí misma ("Elena, I'm finalizing…", firmado "— Elena").
+  Ninguno de los cuatro validadores comparaba remitente contra destinatario.
+- **Qué se hizo:**
+  - `GeneratedCampaign` ahora lleva el `recipient`; nuevo 5º check
+    `sender_recipient` (la persona suplantada jamás puede ser el destinatario;
+    sin recipient registrado, falla: no verificable ≠ limpio).
+  - **Deliberadamente no** se aplica en el schema: si la construcción lo
+    arreglara, el check sería vacuo (el mismo error de H1).
+  - Evidencia preservada: `data/measurements/known-case/ceo_self_impersonation.json`
+    + test de regresión.
+- **Dato para el estudio:** la suite no detecta todo, y saber qué no detecta
+  es parte del resultado. Anotado en `data/measurements/README.md` §3.
+- Commits: `feat(validate): add sender_recipient check…`.
+
+### H4 · Modelos abliterated/uncensored descartados del diseño
+
+- **Decisión:** fuera del catálogo (`docs/models.md` reescrito). Una revisión
+  dual-use los rechazaría, y el argumento de "realismo" no se sostiene: un
+  Llama 3.1 estándar bien prompteado en contexto de investigación genera
+  mensajes igual de realistas (o mejores — el abliteration degrada calidad),
+  porque es el mismo modelo sin el filtro.
+- **Para el estudio cross-family:** instruct estándar, abiertos, locales —
+  Llama 3.1 8B, Qwen 2.5 7B/14B, Mistral 7B (opcional Gemma 2 9B).
+- **Pendiente:** determinar cuál es el mejor que corre la compu (VRAM/RAM),
+  cablearlo como segunda familia junto a `deepseek-chat`, y registrar
+  modelo/cuantización/adapter en la procedencia.
+- Commits: `docs(models): drop abliterated/uncensored catalog…`.
+
+### Menores atendidos
+
+- **Commits regulares:** de aquí en adelante, un commit por cambio enfocado
+  (esta entrada documenta los 7 commits de hoy).
+- **README llenado** (dejó de ser plantilla: nombre, badges reales, env vars,
+  sección de configuración honesta).
+- **Bitácora iniciada** (este archivo).
+- **Enum de pretextos separado:** `Pretext.category` ∈ {consumer, bec}.
+  Consumer: `password_reset`, `account_suspension`, `package_delivery`.
+  BEC: `executive_request`, `invoice_payment`, `shared_document`,
+  `hr_notice`, `it_support`.
+- Commits: `docs(readme): fill in the template placeholders`,
+  `refactor(schemas): tag pretexts by scenario category…`.
+
+---
+
+## 2026-09-23 — Mediciones before/after del fix de links
+
+- `reliability-adk-20260923T185148Z/` (generador roto): 10/10 campañas con
+  violación, todas por `link_consistency`.
+- `reliability-adk-20260923T195458Z/` (generador arreglado): 0/10.
+  → Con la reinterpretación de H1, ese 0/10 es la **garantía post-ensamblador**;
+  la tasa raw de esa corrida no quedó registrada.
+- `reproduce-adk-fixed/`: capa determinista idéntica entre runs; prosa varía.
+- Evidencia del bug cross-channel preservada en `known-case/generated_campaign.json`
+  (`abc123` vs `d6db8064874a`).
+
+## 2026-09-07 — Primera evidencia commiteada
+
+- `data/q3-awareness-2026/generated_campaign.json` (adapter deepseek directo,
+  pre-ADK): primer sample con el bug cross-channel de links; luego copiado a
+  `known-case/` como fixture de regresión.
+
+---
+
+## Abierto / siguiente
+
+- [ ] Re-correr `python -m measurement.reliability --adapter adk --runs 1` con
+      la suite que ya reporta el número raw → el par de tasas para el paper.
+- [ ] Definir el modelo local (Llama 3.1 / Qwen 2.5 / Mistral) según hardware
+      y montar el segundo adapter.
+- [ ] Decidir licencia (README marca "TBD").
+- [ ] Considerar `seed` soportado por el proveedor para prosa reproducible
+      (hoy `seed_supported: false` es el resultado honesto).
