@@ -1,6 +1,6 @@
-# [Project Name] — Documentation
+# PhishCraft — Documentation
 
-Welcome to the documentation for **[Project Name]**, a configurable, reproducible **generator** of synthetic phishing-simulation campaigns over **email and SMS**, for **authorized** security-awareness research in controlled, isolated environments.
+Welcome to the documentation for **PhishCraft**, a configurable, reproducible **generator** of synthetic phishing-simulation campaigns over **email and SMS**, for **authorized** security-awareness research in controlled, isolated environments.
 
 > **Scope & responsible use.** This project runs on **synthetic, internally generated data only** — no external tools or OSINT sources are used to collect real data. Every campaign must pass a built-in authorization gate. Its goal is showing the generator **reliably and reproducibly satisfies campaign constraints** — not measuring whether a message deceives a victim (there is no interaction tracking, KPI, or success-optimization loop). It is intended solely for security-awareness training and red-team exercises with explicit authorization.
 
@@ -13,7 +13,10 @@ Welcome to the documentation for **[Project Name]**, a configurable, reproducibl
 | [PhishCraft User Guide](./pt-shell-guide.md) | **How to use the tool**: install, launch, commands, settings, models, offline mode, measurement, troubleshooting. |
 | [Architecture](./architecture.md) | Stage roles (ADK pipeline), phases, and the measurement loop. |
 | [Flow Schema](./flow-schema.md) | JSON data contracts for every hand-off across the pipeline. |
-| [Generator reliability plan](./generator-reliability-plan.md) | The design rationale behind the current build (workstreams W0–W5). |
+| [Model catalog](./models.md) | Cross-family study candidates (standard open instructs; what was ruled out and why). |
+| [Generator reliability plan](./generator-reliability-plan.md) | The design rationale behind the current build (workstreams W0–W5) + the Oct-2026 review addendum. |
+| [Measurement results](../data/measurements/README.md) | **How to read the numbers** (raw vs post-assembler, actual params, known gaps). |
+| [Bitácora](./bitacora.md) | Lab notebook: dated findings, decisions, and open questions. |
 | [Diagrams](../diagrams_output/) | Rendered architecture diagrams (PNG, 300 DPI). |
 | [Project README](../README.md) | Installation, quick start, project structure, and configuration. |
 
@@ -68,6 +71,5 @@ Phase 3  Measurement (harness)      → reproducibility.json + reliability.json 
 
 ## Getting help
 
-- **Issues:** [https://github.com/[owner]/[repo]/issues](https://github.com/[owner]/[repo]/issues)
-- **Discussions:** [https://github.com/[owner]/[repo]/discussions](https://github.com/[owner]/[repo]/discussions)
-- **Security disclosures:** report privately per [`SECURITY.md`](../SECURITY.md).
+- **Issues:** open an issue in the repository.
+- **Security disclosures:** report privately to the maintainer — do not open a public issue.

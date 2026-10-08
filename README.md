@@ -1,19 +1,15 @@
-# [Project Name]
+# PhishCraft — Phishing-Simulation Campaign Generator
 
 > A configurable, reproducible **generator** of synthetic phishing-simulation campaigns over **email and SMS**, for **authorized** security-awareness research in controlled, isolated environments.
 
-<!-- Replace [owner]/[repo] with your repository path before publishing. -->
-[![CI](https://img.shields.io/github/actions/workflow/status/[owner]/[repo]/ci.yml?branch=main&label=CI)](https://github.com/[owner]/[repo]/actions)
-[![Coverage](https://img.shields.io/codecov/c/github/[owner]/[repo]?label=coverage)](https://codecov.io/gh/[owner]/[repo])
-[![Version](https://img.shields.io/github/v/release/[owner]/[repo]?label=version)](https://github.com/[owner]/[repo]/releases)
-[![License](https://img.shields.io/badge/license-[License]-blue.svg)](./LICENSE)
 [![Status](https://img.shields.io/badge/status-research%20preview-orange.svg)](#)
+[![License](https://img.shields.io/badge/license-TBD-lightgrey.svg)](#)
 
 ---
 
 ## Introduction
 
-**[Project Name]** orchestrates a set of cooperating stages that plan, generate, and verify simulated phishing campaigns — entirely from the command line.
+**PhishCraft** orchestrates a set of cooperating stages that plan, generate, and verify simulated phishing campaigns — entirely from the command line, through the interactive shell `ptshell` or the plain CLIs.
 
 **Problem.** Running realistic security-awareness simulations by hand is slow and inconsistent. Teams need a reproducible way to generate varied, well-labeled campaigns that provably satisfy their constraints — **without ever touching real victim data or live infrastructure.** The contribution here is a generator whose output is *reproducible* (fixed seed, logged provenance) and *coherent* (persona, timing, and cross-channel references hold), verified rather than measured against victims.
 
@@ -45,8 +41,8 @@
 
 ```bash
 # 1. Clone
-git clone https://github.com/[owner]/[repo].git
-cd [repo]
+git clone <repository-url>
+cd <repository>
 
 # 2. Create and activate a virtual environment
 python3 -m venv venv
@@ -62,7 +58,8 @@ pip install -e .
 Verify the installation:
 
 ```bash
-[cli-name] --version
+python -m generator_agent.run --help
+python -m ptshell                 # or just start the interactive shell
 ```
 
 ---
@@ -222,7 +219,7 @@ Every file's job, grouped by directory.
 | `docs/pt-shell-guide.md` | **User guide**: install, commands, settings, models, offline mode, measurement, troubleshooting. |
 | `docs/flow-schema.md` | Every JSON contract with examples and business rules. |
 | `docs/generator-reliability-plan.md` | The design rationale behind this build (workstreams W0–W5). |
-| `docs/models.md` | Candidate model catalog (fine-tuned + foundation baselines). |
+| `docs/models.md` | Model catalog for the cross-family study (standard open instructs; abliterated/uncensored ruled out). |
 | `docs/README.md` | Docs index. |
 
 ### `ptshell/` — PhishCraft, the interactive harness (Claude-Code-style REPL)
@@ -249,17 +246,22 @@ Every file's job, grouped by directory.
 | `diagrams_output/diagram_*.png` | Rendered architecture diagrams (regenerate, don't hand-edit). |
 | `data/q3-awareness-2026/generated_campaign.json` | **Committed evidence**: the original sample containing the cross-channel link bug. |
 | `data/measurements/known-case/generated_campaign.json` | Preserved copy of that evidence, consumed by the validator regression test. |
+| `data/measurements/known-case/ceo_self_impersonation.json` | Preserved evidence of the sender-recipient gap (CEO addressing herself, passed the 4-check suite); pins the `sender_recipient` regression test. |
 | `data/measurements/reproduce-adk/` | Reproducibility results (seed 42 run twice, byte-identical). |
-| `data/measurements/reliability-adk-*/` | Reliability results (`reliability.json` + `summary.md`: the failure-rate tables). |
+| `data/measurements/reproduce-adk-fixed/` | Post-fix reproducibility: deterministic layer identical; prose varies between provider calls at temperature 0. |
+| `data/measurements/reliability-adk-*/` | Reliability results (`reliability.json` + `summary.md`: raw + post-assembler failure tables). |
+| `data/measurements/README.md` | **How to read the numbers**: raw vs post-assembler metrics, actual sampling params, known gaps. |
 
 ---
 
 ## Documentation
 
-- **Documentation home:** [`docs/`](./docs/README.md) · **Hosted docs:** [https://[docs-url]](https://[docs-url])
+- **Documentation home:** [`docs/`](./docs/README.md)
 - **Interactive shell guide:** [`docs/pt-shell-guide.md`](./docs/pt-shell-guide.md)
 - **Architecture & pipeline design:** [`docs/architecture.md`](./docs/architecture.md)
 - **Data contracts (JSON):** [`docs/flow-schema.md`](./docs/flow-schema.md)
+- **Model catalog (cross-family study):** [`docs/models.md`](./docs/models.md)
+- **Lab notebook:** [`docs/bitacora.md`](./docs/bitacora.md)
 - **Architecture diagrams:** [`diagrams_output/`](./diagrams_output/) — regenerate with `python3 scripts/generate_diagrams.py`
 - **API reference:** available at `/docs` when the service is running.
 
@@ -267,68 +269,52 @@ Every file's job, grouped by directory.
 
 ## Configuration
 
-Configuration is resolved in this order: **CLI flags → environment variables → config file → defaults.**
+Configuration is resolved in this order: **CLI flags → environment variables → mission file → defaults.**
 
 ### Environment variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `[PREFIX]_ENV` | Runtime environment (`dev`, `staging`, `prod`) | `dev` |
-| `[PREFIX]_CONFIG` | Path to the config file | `./config.yaml` |
-| `[PREFIX]_DATA_DIR` | Directory for synthetic datasets and outputs | `./data` |
-| `[PREFIX]_LOG_LEVEL` | Logging verbosity (`DEBUG`–`ERROR`) | `INFO` |
-| `[PREFIX]_REQUIRE_AUTH` | Enforce the campaign authorization gate | `true` |
+| `ADK_MODEL` | Model id resolved by ADK (e.g. `deepseek/deepseek-chat`, `gemini-2.5-flash`). | `gemini-2.5-flash` |
+| `DEEPSEEK_API_KEY` | API key for DeepSeek models (via LiteLlm). | — |
+| `GOOGLE_API_KEY` | API key for Gemini models. | — |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Keys for the LiteLlm options. | — |
+| `PTSHELL_CONFIG` | Settings file for the interactive shell. | `~/.pt-shell/config.json` |
 
-Copy the example file and adjust:
+Keys can also live in a gitignored `.env` file at the repo root (loaded
+automatically). **No key is ever committed.**
 
-```bash
-cp .env.example .env
-```
+### Mission file (`config/q3-awareness-2026.mission.json`)
 
-### Config file (`config.yaml`)
+The mission file is the campaign-level config: authorization attestation,
+synthetic-only constraints, channels, the model policy (≥ 2 families), the
+reproducibility seed, and the ethics guardrails.
 
-```yaml
-environment: dev
-data_dir: ./data
-require_authorization: true
-channels: [email, sms]
-reproducibility:
-  seed: 42
-model_policy:
-  models:
-    - { family: deepseek, name: deepseek-chat }
-    - { family: anthropic, name: claude-opus-5 }
-measurement:
-  baseline_specs: 10
+```json
+{
+  "campaign_id": "q3-awareness-2026",
+  "authorized": true,
+  "objective": "security-awareness-training",
+  "constraints": { "synthetic_data_only": true, "channels": ["email", "sms"] },
+  "model_policy": {
+    "models": [
+      { "family": "deepseek", "name": "deepseek-chat" },
+      { "family": "anthropic", "name": "claude-opus-5" }
+    ]
+  },
+  "reproducibility": { "seed": 42, "deterministic": true },
+  "ethics": { "consent_reference": "IRB-2026-014", "isolated_environment": true }
+}
 ```
 
 ---
 
 ## Contributing
 
-Contributions are welcome. Please read [`CONTRIBUTING.md`](./CONTRIBUTING.md) and our [Code of Conduct](./CODE_OF_CONDUCT.md) first.
-
-```bash
-# Fork, then set up a dev environment
-git clone https://github.com/[your-username]/[repo].git
-cd [repo]
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-
-# Run the test suite before opening a PR
-pytest
-
-# Format and lint
-ruff check . && ruff format .
-```
-
-**Guidelines**
-
-1. Open an issue to discuss significant changes before starting.
-2. Create a feature branch (`feature/short-description`).
-3. Keep commits focused; write clear messages.
-4. Ensure tests and linters pass, and add tests for new behavior.
-5. Open a pull request against `main` and fill in the template.
+Contributions are welcome. Open an issue to discuss significant changes before
+starting; keep commits focused with clear messages; add tests for new
+behavior; ensure `pytest -q` and `ruff check . && ruff format .` pass before
+opening a PR.
 
 > **Responsible use:** This project is for authorized, controlled research only. Do not submit features that enable real-world data collection, targeting of non-consenting individuals, or bypassing the authorization gate.
 
@@ -336,13 +322,11 @@ ruff check . && ruff format .
 
 ## License
 
-Distributed under the **[License]** license. See [`LICENSE`](./LICENSE) for full text.
+License: **TBD** — pending the repository owner's decision.
 
 ---
 
 ## Contact & Support
 
-- **Issue tracker:** [https://github.com/[owner]/[repo]/issues](https://github.com/[owner]/[repo]/issues)
-- **Discussions / community:** [https://github.com/[owner]/[repo]/discussions](https://github.com/[owner]/[repo]/discussions)
-- **Email:** [maintainer@example.com]
-- **Security disclosures:** please report privately per [`SECURITY.md`](./SECURITY.md) — do not open a public issue.
+- **Issue tracker:** open an issue in the repository.
+- **Security disclosures:** please report privately to the maintainer — do not open a public issue.
