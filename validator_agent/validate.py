@@ -1,8 +1,8 @@
 """Deterministic coherence validation of a GeneratedCampaign (no LLM).
 
-The four checks mirror ``GeneratedCampaign._coherent`` plus the link rule.
-Every check returns a result object; this module never raises on bad content —
-failures are data, not exceptions.
+The five checks mirror ``GeneratedCampaign._coherent`` plus the link rule and
+the sender-vs-recipient separation. Every check returns a result object; this
+module never raises on bad content — failures are data, not exceptions.
 """
 
 from __future__ import annotations
@@ -99,13 +99,60 @@ def _check_links(campaign: GeneratedCampaign) -> CoherenceCheckResult:
     )
 
 
+def _check_sender_recipient(campaign: GeneratedCampaign) -> CoherenceCheckResult:
+    """The impersonated persona must never be the campaign's own recipient.
+
+    A campaign that has the CEO writing to herself ("Elena, I'm finalizing… —
+    Elena") is semantically broken even when every structural rule holds; this
+    check catches it. Campaigns without a recorded recipient fail it: the
+    separation cannot be verified, and unverifiable is not the same as clean.
+    """
+    if campaign.recipient is None:
+        return CoherenceCheckResult(
+            check="sender_recipient",
+            passed=False,
+            detail=(
+                "campaign carries no recipient — sender-recipient separation "
+                "cannot be verified"
+            ),
+        )
+    same_name = (
+        campaign.recipient.full_name is not None
+        and campaign.recipient.full_name.strip().casefold()
+        == campaign.persona.display_name.strip().casefold()
+    )
+    same_email = (
+        str(campaign.recipient.email).strip().casefold()
+        == str(campaign.persona.email).strip().casefold()
+    )
+    if same_name or same_email:
+        return CoherenceCheckResult(
+            check="sender_recipient",
+            passed=False,
+            detail=(
+                f"persona '{campaign.persona.display_name}' "
+                f"<{campaign.persona.email}> impersonates its own recipient "
+                f"'{campaign.recipient.full_name}' <{campaign.recipient.email}>"
+            ),
+        )
+    return CoherenceCheckResult(
+        check="sender_recipient",
+        passed=True,
+        detail=(
+            f"persona '{campaign.persona.display_name}' is not the recipient "
+            f"'{campaign.recipient.full_name}'"
+        ),
+    )
+
+
 def validate_campaign(campaign: GeneratedCampaign) -> CoherenceReport:
-    """Run the four coherence checks. Never raises on incoherent content."""
+    """Run the five coherence checks. Never raises on incoherent content."""
     results = [
         _check_persona(campaign),
         _check_timing(campaign),
         _check_references(campaign),
         _check_links(campaign),
+        _check_sender_recipient(campaign),
     ]
     return CoherenceReport(
         campaign_id=campaign.campaign_id,

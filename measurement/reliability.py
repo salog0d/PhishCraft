@@ -29,6 +29,7 @@ CHECKS = [
     "timing",
     "cross_channel_reference",
     "link_consistency",
+    "sender_recipient",
 ]
 
 

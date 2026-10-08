@@ -1,0 +1,98 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "Elena Marchetti",
+    "email": "ceo@fantazylabz.tech",
+    "role": "Chief Executive Officer",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "elena.marchetti@fantazylabz.tech",
+    "full_name": "Elena Marchetti",
+    "role": "Chief Executive Officer",
+    "department": "Executive"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "Elena Marchetti",
+        "from_address": "ceo@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Quick approval needed before EOD",
+      "body": "Elena, I'm finalizing the Q3 vendor payment and need your sign-off today. Please review the summary and confirm. — Elena",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/8b9dc310f705",
+        "button_label": "Review Summary"
+      },
+      "references": [],
+      "provenance": {
+        "model": {
+          "family": "deepseek",
+          "name": "deepseek-chat",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.7,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 42
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "2b5cb5d87d1190211b53e3df3ccc93913a284e5dfd0ec5f5d6c2fe2cf094cb6a",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "Elena Marchetti",
+        "from_address": "ceo@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Hi Elena, did you get my email about the Q3 approval? Need it before EOD - link: sim.fantazylabz.tech/t/abc123",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/8b9dc310f705",
+        "button_label": "Review Summary"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "provenance": {
+        "model": {
+          "family": "deepseek",
+          "name": "deepseek-chat",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.6,
+          "top_p": 1.0,
+          "max_tokens": 256,
+          "seed": 42
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "2b5cb5d87d1190211b53e3df3ccc93913a284e5dfd0ec5f5d6c2fe2cf094cb6a",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk"
+        }
+      }
+    }
+  ]
+}

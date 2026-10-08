@@ -107,13 +107,13 @@ def diagram_1_system_architecture() -> str:
                     PALETTE["content"])
         _agent_node(c, "assembler", "2. assembler_agent\n(BaseAgent, deterministic)\nids · URLs · schedule · provenance",
                     PALETTE["deterministic"])
-        _agent_node(c, "validator", "3. validator_agent\n(BaseAgent, deterministic)\n4 coherence checks",
+        _agent_node(c, "validator", "3. validator_agent\n(BaseAgent, deterministic)\n5 coherence checks",
                     PALETTE["verification"])
 
     # Outputs.
     dot.node("campaign", "GeneratedCampaign\n(email + SMS)", shape="box",
              fillcolor="#EAECEE", color=PALETTE["neutral"], fontcolor="#1B2631")
-    dot.node("report", "CoherenceReport\n(4 checks)", shape="box",
+    dot.node("report", "CoherenceReport\n(5 checks)", shape="box",
              fillcolor="#EAECEE", color=PALETTE["neutral"], fontcolor="#1B2631")
 
     # One-way flow; no feedback edge.
@@ -143,7 +143,7 @@ def diagram_2_artifact_flow() -> str:
         ("p1", "Phase 1: Generation (Generator-AG)",
          "GeneratedCampaign (email + SMS, provenance)"),
         ("p2", "Phase 2: Verification (Validator-AG)",
-         "CoherenceReport (4 checks) + ProvenanceLog"),
+         "CoherenceReport (5 checks) + ProvenanceLog"),
         ("p3", "Measurement (harness, drives ADK Runner)",
          "reproducibility.json + reliability.json + summary.md"),
     ]
@@ -225,16 +225,16 @@ def diagram_3_sequence() -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Diagram 4 -- The four coherence checks (the verification gate)
+# Diagram 4 -- The five coherence checks (the verification gate)
 # --------------------------------------------------------------------------- #
 
 def diagram_4_coherence_checks() -> str:
     dot = _base_graph("coherence_checks", "Coherence Checks")
-    dot.attr(label="Diagram 4 -- The Four Coherence Checks (deterministic)",
+    dot.attr(label="Diagram 4 -- The Five Coherence Checks (deterministic)",
              labelloc="t", fontsize="18", fontcolor="#2C3E50")
     dot.attr(ranksep="0.8")
 
-    _agent_node(dot, "campaign", "GeneratedCampaign\n(persona + messages)",
+    _agent_node(dot, "campaign", "GeneratedCampaign\n(persona + recipient + messages)",
                 PALETTE["deterministic"])
 
     dot.node("c1", "persona_identity\nsender == persona\neverywhere",
@@ -249,11 +249,14 @@ def diagram_4_coherence_checks() -> str:
     dot.node("c4", "link_consistency\nbody links match the CTA;\nsame link across channels",
              shape="box", fillcolor="#F4ECF7", color=PALETTE["content"],
              fontcolor="#1B2631")
+    dot.node("c5", "sender_recipient\npersona never impersonates\nits own recipient",
+             shape="box", fillcolor="#F4ECF7", color=PALETTE["content"],
+             fontcolor="#1B2631")
 
     _agent_node(dot, "report", "CoherenceReport\nall_passed = AND",
                 PALETTE["verification"])
 
-    for check in ("c1", "c2", "c3", "c4"):
+    for check in ("c1", "c2", "c3", "c4", "c5"):
         dot.edge("campaign", check)
         dot.edge(check, "report")
 

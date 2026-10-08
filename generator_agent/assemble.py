@@ -248,6 +248,8 @@ def assemble_campaign(
       persona bindings are ignored. Without an override the bindings supply the
       persona (legacy standalone path). Either way the model never writes a
       sender field.
+    - **recipient** — the simulation target is stamped from the profile, so
+      the validator's sender-recipient check runs on the artifact itself.
     - **timing** — ``scheduled`` (or the decode-time ``EMAIL_TIME < SMS_TIME``
       constraint) orders the messages; re-checked here by the schema.
     - **cross_channel_reference** — ``references`` is written by this function,
@@ -256,7 +258,8 @@ def assemble_campaign(
       never copies one).
     - **link consistency** — any tracking token the model wrote into prose is
       normalized to the campaign token, so body links match the CTA by
-      construction.
+      construction (each rewrite is recorded in the message's ``link_fixes``,
+      which is what the raw pre-assembler metric measures).
     - **determinism** — with fixed ``generated_at`` + ``scheduled``, the same
       inputs produce byte-identical output (no uuid, no clock reads).
     """
@@ -349,6 +352,9 @@ def assemble_campaign(
         {
             "campaign_id": mission_config["campaign_id"],
             "persona": persona,
+            # The simulation target, stamped from the profile so the validator
+            # can check sender-recipient separation on the artifact itself.
+            "recipient": profile.get("recipient"),
             "messages": messages,
         }
     )

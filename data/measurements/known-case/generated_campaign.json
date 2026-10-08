@@ -18,7 +18,7 @@
         "impersonated_brand": null
       },
       "subject": "Urgent: Vendor payment approval needed today",
-      "body": "Rajesh, I'm finalizing the Q3 vendor payment and need your technical sign-off before EOD. Please review the attached summary and confirm immediately. — Elena",
+      "body": "Rajesh, I'm finalizing the Q3 vendor payment and need your technical sign-off before EOD. Please review the attached summary and confirm immediately. \u2014 Elena",
       "call_to_action": {
         "type": "click_link",
         "landing_url": "https://sim.fantazylabz.tech/t/d6db8064874a",
@@ -86,5 +86,11 @@
         }
       }
     }
-  ]
+  ],
+  "recipient": {
+    "email": "rajesh.kapoor@fantazylabz.tech",
+    "full_name": "Rajesh Kapoor",
+    "role": "Chief Technology Officer",
+    "department": "Engineering"
+  }
 }

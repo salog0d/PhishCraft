@@ -226,9 +226,37 @@ def test_coherence_report_all_passed_must_match_results():
         {"check": "timing", "passed": True},
         {"check": "cross_channel_reference", "passed": False},
         {"check": "link_consistency", "passed": True},
+        {"check": "sender_recipient", "passed": True},
     ]
     with pytest.raises(ValidationError):
         fc.CoherenceReport(campaign_id="q3", results=results, all_passed=True)
+
+
+def test_coherence_report_requires_all_five_checks():
+    results = [
+        {"check": "persona_identity", "passed": True},
+        {"check": "timing", "passed": True},
+        {"check": "cross_channel_reference", "passed": True},
+        {"check": "link_consistency", "passed": True},
+        # sender_recipient missing -> report contract violated
+    ]
+    with pytest.raises(ValidationError):
+        fc.CoherenceReport(campaign_id="q3", results=results, all_passed=True)
+
+
+def test_campaign_carries_the_simulation_target():
+    campaign = fc.GeneratedCampaign(
+        campaign_id="q3",
+        persona=_persona(),
+        recipient={
+            "email": "rajesh.kapoor@fantazylabz.tech",
+            "full_name": "Rajesh Kapoor",
+            "role": "Chief Technology Officer",
+            "department": "Engineering",
+        },
+        messages=[_email(), _sms()],
+    )
+    assert campaign.recipient.full_name == "Rajesh Kapoor"
 
 
 # --------------------------------------------------------------------------- #

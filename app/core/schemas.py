@@ -388,13 +388,28 @@ class ImpersonatedPersona(BaseModel, frozen=True):
 class GeneratedCampaign(BaseModel):
     """A coherent multi-channel bundle of generated messages for one persona.
 
-    Enforces the three coherence rules that are this project's contribution:
-    persona identity, send timing, and cross-channel reference existence."""
+    Enforces the three construction coherence rules that are this project's
+    contribution: persona identity, send timing, and cross-channel reference
+    existence. The remaining checks (link consistency, sender-vs-recipient) are
+    deliberately **not** enforced here — they are evaluated by the
+    deterministic validator, so a violation is recorded as data instead of
+    being silently repaired (or made unfalsifiable) by construction.
+
+    ``recipient`` records the simulation target the campaign was generated
+    for; it lets the validator check that the impersonated persona never
+    impersonates its own recipient."""
 
     PERSISTENCE: ClassVar["PersistencePolicy"]
 
     campaign_id: CampaignId
     persona: ImpersonatedPersona
+    recipient: Optional[Recipient] = Field(
+        default=None,
+        description=(
+            "The simulation target (the person the messages are addressed to). "
+            "The impersonated persona must never be the recipient."
+        ),
+    )
     messages: list[GeneratedMessage] = Field(..., min_length=1)
 
     @model_validator(mode="after")
@@ -435,6 +450,7 @@ class CoherenceCheck(str, Enum):
     TIMING = "timing"
     CROSS_CHANNEL_REFERENCE = "cross_channel_reference"
     LINK_CONSISTENCY = "link_consistency"
+    SENDER_RECIPIENT = "sender_recipient"
 
 
 class CoherenceCheckResult(BaseModel):
@@ -449,15 +465,16 @@ class CoherenceReport(BaseModel):
     This is the evidence artifact for 'the generator satisfies its
     constraints' -- the project's reproducible result, not a victim metric.
 
-    Covers the four coherence checks: persona identity, send timing,
-    cross-channel reference existence, and cross-channel link consistency
-    (every URL written into a message body must match the CTA link, and a
-    follow-up must point at the same link it cites)."""
+    Covers the five coherence checks: persona identity, send timing,
+    cross-channel reference existence, cross-channel link consistency (every
+    URL written into a message body must match the CTA link, and a follow-up
+    must point at the same link it cites), and sender-vs-recipient separation
+    (the impersonated persona must never be the campaign's own recipient)."""
 
     PERSISTENCE: ClassVar["PersistencePolicy"]
 
     campaign_id: CampaignId
-    results: list[CoherenceCheckResult] = Field(..., min_length=4)
+    results: list[CoherenceCheckResult] = Field(..., min_length=5)
     all_passed: bool
 
     @model_validator(mode="after")
