@@ -32,7 +32,7 @@ Hard rules:
 - Email messages **must** have a `subject`; SMS messages **must not** (and stay ≤ 1600 characters).
 - The impersonated persona is **given in the user message**. Use that identity byte‑for‑byte for every message — never invent a persona and never reuse an identity from the examples below.
 - The `sender` must stay identical to the campaign persona across every message (the impersonated identity is the same everywhere).
-- The campaign has **one** tracking link: the landing URL given in the user message. If your body or subject mentions a link, copy that exact URL — **never invent a tracking token**.
+- The campaign has **one** tracking link, derived deterministically from the campaign and seed. **Never write a URL or a tracking token** into any subject or body: where the link should appear, write exactly the placeholder `{{cta-link}}`; the assembler substitutes the real landing URL.
 - `provenance` records the exact `model`, `params` (including the `seed`), `prompt_template_id`, and `prompt_hash` (sha256 of the rendered prompt) actually used.
 - `references` may only cite `message_id`s that already exist earlier in the campaign; a follow‑up is scheduled **after** what it references.
 
@@ -72,7 +72,7 @@ URL are placeholders — replace them with the values from the user message.
   "channel": "sms",
   "scheduled_at": "2026-08-20T10:15:00Z",
   "sender": { "display_name": "<persona display name>", "from_address": "<persona address>" },
-  "body": "Hi <recipient first name>, did you get my email? Please confirm before EOD - link: sim.example.com/t/<campaign-token>",
+  "body": "Hi <recipient first name>, did you get my email? Please confirm before EOD - link: {{cta-link}}",
   "call_to_action": { "type": "click_link", "landing_url": "https://sim.example.com/t/<campaign-token>" },
   "references": ["msg-0001"],
   "provenance": {
@@ -142,6 +142,25 @@ def landing_url_for(mission_config: dict, profile: dict) -> str:
 
 _TOKEN_IN_LINK = re.compile(r"(sim\.[A-Za-z0-9.-]+/t/)([A-Za-z0-9_-]+)")
 
+# NOTE: the placeholder must NOT be a valid Python identifier. The ADK
+# pipeline renders the LlmAgent instruction with state injection (regex
+# {+[^{}]*}+); an identifier inner name — e.g. {{cta_link}} — raises
+# "Context variable not found: `cta_link`". "cta-link" is not an identifier,
+# so ADK passes it through untouched (regression test in test_refinement.py).
+LINK_PLACEHOLDER = "{{cta-link}}"
+
+
+def expand_link_placeholders(text: str, landing_url: str) -> str:
+    """Substitute the ``{{cta-link}}`` convention with the real landing URL.
+
+    The model is instructed never to write URLs or tracking tokens; the
+    placeholder is the convention it uses instead. Expansion is the assembler
+    honoring that convention — unlike a stale-token rewrite it is **not**
+    recorded as a ``link_fix`` (writing the placeholder is correct behavior,
+    not a violation).
+    """
+    return text.replace(LINK_PLACEHOLDER, landing_url)
+
 
 def fix_body_links(text: str, token: str) -> tuple[str, list[str]]:
     """Rewrite any tracking token written into prose to the campaign token.
@@ -204,8 +223,9 @@ def user_prompt(
         f"tone={tone}, difficulty={difficulty}, language={language}.\n"
         f"Recipient: {recipient['full_name']} ({recipient['role']}, "
         f"{recipient['department']}).\n"
-        f"The campaign's single landing URL (if you write a link, copy this "
-        f"exact URL): {landing_url}\n"
+        f"The campaign's single landing URL is {landing_url}. Never write a "
+        f"URL or tracking token into your output — where the link should "
+        f"appear, write exactly the placeholder {{{{cta-link}}}}.\n"
         f"{persona_block}"
         "Now write the first message, an email:\n"
         "- subject: [EMAIL_SUBJECT]\n"
@@ -273,10 +293,12 @@ def assemble_campaign(
       so a cited id always exists.
     - **channel shaping** — email gets a subject; SMS gets none (this function
       never copies one).
-    - **link consistency** — any tracking token the model wrote into prose is
-      normalized to the campaign token, so body links match the CTA by
-      construction (each rewrite is recorded in the message's ``link_fixes``,
-      which is what the raw pre-assembler metric measures).
+    - **link consistency** — the ``{{cta-link}}`` placeholder the prompt
+      teaches is expanded to the campaign's landing URL (correct behavior,
+      never recorded), and any stale tracking token the model wrote into
+      prose is normalized to the campaign token, so body links match the CTA
+      by construction (each rewrite is recorded in the message's
+      ``link_fixes``, which is what the raw pre-assembler metric measures).
     - **determinism** — with fixed ``generated_at`` + ``scheduled``, the same
       inputs produce byte-identical output (no uuid, no clock reads).
     """
@@ -308,13 +330,22 @@ def assemble_campaign(
     cta_type, cta_label = CTA_BY_PRETEXT.get(pretext, ("click_link", "Open"))
     cta = {"type": cta_type, "landing_url": landing_url, "button_label": cta_label}
 
-    # Normalize any stale token the model copied into prose (W: link fix).
-    # Each rewrite is recorded per message as `link_fixes` — the raw,
-    # pre-assembler link-consistency evidence that the reliability harness
-    # reports next to the (by-construction) post-assembler guarantee.
-    email_subject, subject_fixes = fix_body_links(b["EMAIL_SUBJECT"], token)
-    email_body, email_fixes = fix_body_links(b["EMAIL_BODY"], token)
-    sms_body, sms_fixes = fix_body_links(b["SMS_BODY"], token)
+    # Link handling, in two steps:
+    # 1. Expand the {{cta-link}} placeholder convention the prompt teaches —
+    #    correct behavior, never recorded as a fix.
+    # 2. Normalize any stale token the model wrote anyway (W: link fix). Each
+    #    rewrite is recorded per message as `link_fixes` — the raw,
+    #    pre-assembler link-consistency evidence that the reliability harness
+    #    reports next to the (by-construction) post-assembler guarantee.
+    email_subject, subject_fixes = fix_body_links(
+        expand_link_placeholders(b["EMAIL_SUBJECT"], landing_url), token
+    )
+    email_body, email_fixes = fix_body_links(
+        expand_link_placeholders(b["EMAIL_BODY"], landing_url), token
+    )
+    sms_body, sms_fixes = fix_body_links(
+        expand_link_placeholders(b["SMS_BODY"], landing_url), token
+    )
 
     def link_fixes_for(*pairs: tuple[str, list[str]]) -> list[dict]:
         return [

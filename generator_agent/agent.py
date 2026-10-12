@@ -11,6 +11,9 @@ Constraint design (per "Prompting is Programming"):
   stamped into every message by ``assemble``; the bindings only echo it.
 - ``EMAIL_TIME < SMS_TIME`` is a decode-time constraint.
 - SMS body capped at 1600 characters in ``where``.
+- link text: the prompt teaches the ``{{cta-link}}`` placeholder; ``assemble``
+  expands it to the landing URL and normalizes any stale token the model wrote
+  anyway (recorded per message as ``link_fixes``).
 - the user segment here must mirror ``assemble.rendered_prompt`` exactly, or
   the provenance hash stops matching the prompt actually sent — it is built by
   ``assemble.user_prompt`` itself, so the two cannot drift.

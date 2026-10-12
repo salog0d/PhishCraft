@@ -36,7 +36,7 @@ Hard rules:
 - Email messages **must** have a `subject`; SMS messages **must not** (and stay ≤ 1600 characters).
 - The impersonated persona is **given in the user message**. Use that identity byte‑for‑byte for every message — never invent a persona and never reuse an identity from the examples below.
 - The `sender` must stay identical to the campaign persona across every message (the impersonated identity is the same everywhere).
-- The campaign has **one** tracking link: the landing URL given in the user message. If your body or subject mentions a link, copy that exact URL — **never invent a tracking token**.
+- The campaign has **one** tracking link, derived deterministically from the campaign and seed. **Never write a URL or a tracking token** into any subject or body: where the link should appear, write exactly the placeholder `{{cta-link}}`; the assembler substitutes the real landing URL.
 - `provenance` records the exact `model`, `params` (including the `seed`), `prompt_template_id`, and `prompt_hash` (sha256 of the rendered prompt) actually used.
 - `references` may only cite `message_id`s that already exist earlier in the campaign; a follow‑up is scheduled **after** what it references.
 
@@ -76,7 +76,7 @@ URL are placeholders — replace them with the values from the user message.
   "channel": "sms",
   "scheduled_at": "2026-08-20T10:15:00Z",
   "sender": { "display_name": "<persona display name>", "from_address": "<persona address>" },
-  "body": "Hi <recipient first name>, did you get my email? Please confirm before EOD - link: sim.example.com/t/<campaign-token>",
+  "body": "Hi <recipient first name>, did you get my email? Please confirm before EOD - link: {{cta-link}}",
   "call_to_action": { "type": "click_link", "landing_url": "https://sim.example.com/t/<campaign-token>" },
   "references": ["msg-0001"],
   "provenance": {
@@ -129,8 +129,9 @@ def generator_ag(
         f"tone={tone}, difficulty={difficulty}, language=en.\n"
         f"Recipient: {recipient['full_name']} ({recipient['role']}, "
         f"{recipient['department']}).\n"
-        f"The campaign's single landing URL (if you write a link, copy this "
-        f"exact URL): {landing_url}\n"
+        f"The campaign's single landing URL is {landing_url}. Never write a "
+        f"URL or tracking token into your output — where the link should "
+        f"appear, write exactly the placeholder {{{{cta-link}}}}.\n"
         "The impersonated persona is fixed — use this identity for every "
         "message, byte-for-byte:\n"
         f"- display name: {selected['display_name']}\n"
@@ -199,8 +200,8 @@ def generator_ag(
             "channel": "email",
             "scheduled_at": EMAIL_TIME.strip(),
             "sender": sender,
-            "subject": EMAIL_SUBJECT.strip(),  # control flow by program: email only
-            "body": EMAIL_BODY.strip(),
+            "subject": expand_link_placeholders(EMAIL_SUBJECT.strip(), landing_url),
+            "body": expand_link_placeholders(EMAIL_BODY.strip(), landing_url),
             "call_to_action": {
                 "type": cta_type,
                 "landing_url": landing_url,
@@ -217,7 +218,7 @@ def generator_ag(
             "channel": "sms",
             "scheduled_at": SMS_TIME.strip(),
             "sender": sender,  # by construction — identical persona
-            "body": SMS_BODY.strip(),  # subject absent by construction
+            "body": expand_link_placeholders(SMS_BODY.strip(), landing_url),
             "call_to_action": {
                 "type": cta_type,
                 "landing_url": landing_url,
@@ -243,3 +244,10 @@ def generator_ag(
 > generator (k candidate campaigns, `where`-filtered identically) — the
 > mechanism for the paper's distributional queries, left unused here because
 > the campaign contract is deterministic per seed.
+>
+> Note: the `{{cta-link}}` placeholder convention (the model never writes
+> URLs or tracking tokens) is expanded by the assembler before delivery; in
+> the current codebase the assembly itself delegates to
+> `generator_agent.assemble.assemble_campaign`, which expands the placeholder
+> and normalizes any stale token the model wrote anyway (recorded per message
+> as `link_fixes`).

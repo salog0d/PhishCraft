@@ -151,6 +151,47 @@ def test_fix_body_links_reports_the_stale_tokens():
     assert replaced == []
 
 
+def test_expand_link_placeholders_substitutes_the_landing_url():
+    """The {{cta-link}} convention expands to the real landing URL."""
+    from generator_agent.assemble import expand_link_placeholders
+
+    url = "https://sim.fantazylabz.tech/t/8b9dc310f705"
+    assert expand_link_placeholders("Click {{cta-link}} now", url) == \
+        f"Click {url} now"
+    assert expand_link_placeholders("no link here", url) == "no link here"
+
+
+def test_placeholder_is_expanded_and_not_recorded_as_a_link_fix():
+    """Writing {{cta-link}} is correct behavior — expansion is not a fix."""
+    placeholder = dict(BINDINGS, SMS_BODY="Hi Rebecca, click {{cta-link}} now.")
+    campaign = assemble_campaign(
+        placeholder, MISSION, PROFILE, "executive_request", "urgent", "medium"
+    )
+    email, sms = campaign.messages
+    assert sms.link_fixes == []
+    assert email.link_fixes == []
+    assert "8b9dc310f705" in sms.body          # the real token was substituted
+    assert "{{cta-link}}" not in sms.body     # no literal placeholder survives
+
+
+def test_placeholder_in_subject_is_expanded_too():
+    placeholder = dict(BINDINGS, EMAIL_SUBJECT="Open {{cta-link}} before EOD")
+    campaign = assemble_campaign(
+        placeholder, MISSION, PROFILE, "executive_request", "urgent", "medium"
+    )
+    assert "8b9dc310f705" in campaign.messages[0].subject
+    assert "{{cta-link}}" not in campaign.messages[0].subject
+
+
+def test_user_prompt_instructs_the_placeholder_convention():
+    from generator_agent.assemble import user_prompt
+
+    prompt = user_prompt(
+        MISSION, PROFILE, "executive_request", "urgent", "medium"
+    )
+    assert "{{cta-link}}" in prompt
+
+
 def test_assemble_normalizes_a_stale_sms_link():
     """A model-written 'abc123' in the SMS body is fixed by construction."""
     stale = dict(BINDINGS, SMS_BODY=(
