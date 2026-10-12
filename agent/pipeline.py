@@ -51,6 +51,10 @@ generator_content_agent = LlmAgent(
         "body) for one synthetic recipient. The persona is decided by the "
         "deterministic layer; this agent only echoes it and writes the prose."
     ),
+    # ADK renders this instruction with {var} state injection — any brace
+    # group whose inner text is a valid identifier raises KeyError. The
+    # {{cta-link}} placeholder is identifier-invalid on purpose (see
+    # generator_agent.assemble.LINK_PLACEHOLDER and test_refinement.py).
     instruction=CHARTER + BINDINGS_CONTRACT,
     output_key="raw_bindings",
 )
