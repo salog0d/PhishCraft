@@ -7,16 +7,23 @@ Aggregates over every spec x run: how many campaigns violate at least one
 coherence constraint, broken down by check. Writes ``<out>/reliability.json``
 and a human-readable ``<out>/summary.md``.
 
-Two link-consistency numbers are reported, and they measure different things:
+Three link-consistency numbers are reported, and they measure different
+layers of the pipeline:
 
-- **Raw (pre-assembler) violation rate** — from each message's ``link_fixes``,
-  the stale tokens the LLM actually wrote before the assembler normalized
-  them. This is the generator's *reliability* metric. Normalization never
-  triggers a retry, so this is the first-attempt output.
-- **Post-assembler violation rate** (``failure_rate``) — the validator's
-  ``link_consistency`` check on the delivered artifact. By construction this
-  is 0 after the normalization fix: it is the *delivery guarantee*, not the
-  reliability metric.
+- **First-attempt raw violation rate** — from the driver's run_info: the
+  stale tokens the LLM wrote on its *first* attempt, before any refinement
+  round. This is the generator's *reliability* metric.
+- **Post-refinement raw violation rate** (``raw_link_violation_rate``) — the
+  stale tokens remaining on the *delivered* artifact after self-refinement
+  rounds (from each message's ``link_fixes``). With refinement enabled this
+  is expected to be 0.
+- **Post-assembler failure rate** (``failure_rate``) — the validator's
+  coherence checks on the delivered artifact. By construction this is 0 for
+  ``link_consistency`` after the normalization fix: it is the *delivery
+  guarantee*, not a model metric.
+
+The stub adapter never refines (no LLM), so its first-attempt and
+post-refinement numbers coincide.
 
 The interactive shell calls ``run()`` directly.
 """
@@ -84,6 +91,14 @@ def run(
         check for r in ok for check in r.failing_checks
     )
     n_raw = sum(1 for r in ok if r.raw_link_violations > 0)
+    n_first = sum(
+        1 for r in ok if (r.first_attempt_raw_link_violations or 0) > 0
+    )
+    n_refined = sum(1 for r in ok if r.refined)
+    n_refined_to_clean = sum(
+        1 for r in ok if r.refined and r.raw_link_violations == 0
+    )
+    attempts = [r.n_attempts for r in ok if r.n_attempts is not None]
 
     payload = {
         "adapter": adapter.name,
@@ -95,12 +110,31 @@ def run(
         "failure_rate": (
             round(n_with_violation / len(ok), 4) if ok else None
         ),
-        # Raw link-consistency (LLM output before the assembler normalized it)
-        # is the generator's reliability metric; failure_rate above is the
-        # post-assembler delivery guarantee.
+        # First-attempt raw link violations (the LLM's output before any
+        # refinement round) is the generator's reliability metric.
+        "n_campaigns_with_first_attempt_raw_violation": n_first,
+        "first_attempt_raw_link_violation_rate": (
+            round(n_first / len(ok), 4) if ok else None
+        ),
+        "total_first_attempt_raw_link_violations": sum(
+            r.first_attempt_raw_link_violations or 0 for r in ok
+        ),
+        # Raw link violations remaining on the delivered artifact, after
+        # self-refinement rounds; failure_rate above is the post-assembler
+        # delivery guarantee.
         "n_campaigns_with_raw_link_violation": n_raw,
         "raw_link_violation_rate": (round(n_raw / len(ok), 4) if ok else None),
         "total_raw_link_violations": sum(r.raw_link_violations for r in ok),
+        # Self-refinement activity (from the driver's run_info).
+        "n_refined": n_refined,
+        "n_refined_to_clean": n_refined_to_clean,
+        "refinement_success_rate": (
+            round(n_refined_to_clean / n_refined, 4) if n_refined else None
+        ),
+        "avg_attempts": (
+            round(sum(attempts) / len(attempts), 2) if attempts else None
+        ),
+        "attempts_distribution": dict(Counter(attempts)),
         "violation_counts": {c: violation_counts.get(c, 0) for c in CHECKS},
         "per_spec": [
             {
@@ -111,6 +145,11 @@ def run(
                 "campaign_hash": r.campaign_hash,
                 "failing_checks": r.failing_checks,
                 "raw_link_violations": r.raw_link_violations,
+                "first_attempt_raw_link_violations": (
+                    r.first_attempt_raw_link_violations
+                ),
+                "n_attempts": r.n_attempts,
+                "refined": r.refined,
                 "error": r.error,
                 "duration_ms": r.duration_ms,
             }
@@ -129,19 +168,32 @@ def run(
         f"- specs: {payload['n_specs']} · runs: {payload['n_runs']} · "
         f"generation errors: {payload['n_generation_errors']}",
         "",
-        "## Two link-consistency numbers",
+        "## Three link-consistency numbers",
         "",
-        f"- **Raw (pre-assembler) violations — generator reliability:** "
+        f"- **First-attempt raw violations — generator reliability:** "
+        f"{payload['n_campaigns_with_first_attempt_raw_violation']}/{len(ok)} campaigns "
+        f"({payload['first_attempt_raw_link_violation_rate']}); "
+        f"{payload['total_first_attempt_raw_link_violations']} stale tokens "
+        f"total. Counted from the driver's first parse-successful attempt, "
+        f"before any refinement round.",
+        f"- **Post-refinement raw violations — delivered artifact:** "
         f"{payload['n_campaigns_with_raw_link_violation']}/{len(ok)} campaigns "
         f"({payload['raw_link_violation_rate']}); "
-        f"{payload['total_raw_link_violations']} stale tokens total. "
-        f"Counted from each message's `link_fixes`, i.e. the LLM's output "
-        f"before normalization and before any retry.",
+        f"{payload['total_raw_link_violations']} stale tokens total. The "
+        f"`link_fixes` remaining on the final artifact after self-refinement.",
         f"- **Post-assembler violations — delivery guarantee:** "
         f"{payload['n_campaigns_with_violation']}/{len(ok)} campaigns "
         f"(failure rate {payload['failure_rate']}). By construction this is 0 "
         f"for `link_consistency` after the normalization fix; it measures the "
         f"delivered artifact, not the model.",
+        "",
+        "## Self-refinement",
+        "",
+        f"- campaigns refined: {payload['n_refined']} · refined to clean: "
+        f"{payload['n_refined_to_clean']} (success rate "
+        f"{payload['refinement_success_rate']})",
+        f"- attempts: avg {payload['avg_attempts']} · distribution "
+        f"{payload['attempts_distribution']}",
         "",
         "## Violations by coherence check (post-assembler artifact)",
         "",
@@ -154,14 +206,18 @@ def run(
         "",
         "## Per-spec results",
         "",
-        "| spec | run | seed | status | failing checks | raw link violations |",
-        "|---|---|---|---|---|---|",
+        "| spec | run | seed | status | attempts | refined | first raw | "
+        "final raw | failing checks |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in records:
         lines.append(
             f"| {r.spec_id} | {r.run_index} | {r.seed} | {r.status} | "
-            f"{', '.join(r.failing_checks) or '—'} | "
-            f"{r.raw_link_violations} |"
+            f"{r.n_attempts if r.n_attempts is not None else '—'} | "
+            f"{'yes' if r.refined else 'no'} | "
+            f"{r.first_attempt_raw_link_violations if r.first_attempt_raw_link_violations is not None else '—'} | "
+            f"{r.raw_link_violations} | "
+            f"{', '.join(r.failing_checks) or '—'} |"
         )
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 

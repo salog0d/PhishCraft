@@ -6,6 +6,12 @@
 - ``StubAdapter`` — offline path: fixed bindings through the same
   deterministic assembler + validator, no LLM, no API key. For testing the
   harness and CI only.
+
+Both adapters expose ``run`` (campaign, report) and ``run_with_info``
+(campaign, report, run_info) where ``run_info`` carries the refinement
+metadata (``n_attempts``, ``refined``, ``first_attempt_raw_link_violations``)
+that the reliability harness reports. The stub never refines, so its
+first-attempt and final numbers coincide.
 """
 
 from __future__ import annotations
@@ -38,6 +44,13 @@ class AdkPipelineAdapter:
         profile = profile_for(spec["recipient_id"], pretext=spec["pretext"])
         return run_pipeline(spec, mission, profile)
 
+    def run_with_info(self, spec: dict, mission: dict):
+        """The measured path, plus the driver's refinement metadata."""
+        from agent.driver import run_pipeline_with_info
+
+        profile = profile_for(spec["recipient_id"], pretext=spec["pretext"])
+        return run_pipeline_with_info(spec, mission, profile)
+
 
 class StubAdapter:
     """Offline path: deterministic assembly + validation, no model call."""
@@ -65,6 +78,17 @@ class StubAdapter:
             persona_override=profile.get("persona"),
         )
         return campaign, validate_campaign(campaign)
+
+    def run_with_info(self, spec: dict, mission: dict):
+        """Stub refinement metadata: one attempt, never refined (no LLM)."""
+        campaign, report = self.run(spec, mission)
+        return campaign, report, {
+            "n_attempts": 1,
+            "refined": False,
+            "first_attempt_raw_link_violations": sum(
+                len(m.link_fixes) for m in campaign.messages
+            ),
+        }
 
 
 ADAPTERS = {

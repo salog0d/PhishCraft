@@ -18,10 +18,14 @@ class RunRecord:
     status: str  # "ok" | "generation_error"
     campaign_hash: str | None = None
     failing_checks: list = field(default_factory=list)
-    raw_link_violations: int = 0  # stale tokens the LLM wrote, pre-assembler
+    raw_link_violations: int = 0  # stale tokens in the final (delivered) artifact
     report: dict | None = None
     error: str | None = None
     duration_ms: int = 0
+    # Self-refinement metadata (from the driver's run_info):
+    n_attempts: int | None = None
+    refined: bool = False  # at least one refinement round ran
+    first_attempt_raw_link_violations: int | None = None  # pre-refinement raw metric
 
 
 def canonical_hash(campaign) -> str:
@@ -53,7 +57,12 @@ def deterministic_layer_hash(campaign) -> str:
 def run_spec(spec, adapter, run_index: int, mission: dict) -> RunRecord:
     start = time.perf_counter()
     try:
-        campaign, report = adapter.run(spec.to_dict(), mission)
+        run_with_info = getattr(adapter, "run_with_info", None)
+        if run_with_info is not None:
+            campaign, report, info = run_with_info(spec.to_dict(), mission)
+        else:
+            campaign, report = adapter.run(spec.to_dict(), mission)
+            info = {}
     except Exception as exc:  # ValidationError, timeouts, provider errors...
         return RunRecord(
             spec_id=spec.spec_id,
@@ -74,9 +83,13 @@ def run_spec(spec, adapter, run_index: int, mission: dict) -> RunRecord:
         status="ok",
         campaign_hash=canonical_hash(campaign),
         failing_checks=[r.check.value for r in report.results if not r.passed],
-        # Raw (pre-assembler) link violations: the assembler logged every stale
-        # token it normalized into the message's link_fixes.
+        # Raw link violations on the delivered (post-refinement) artifact.
         raw_link_violations=sum(len(m.link_fixes) for m in campaign.messages),
         report=report.model_dump(),
         duration_ms=int((time.perf_counter() - start) * 1000),
+        n_attempts=info.get("n_attempts"),
+        refined=bool(info.get("refined", False)),
+        first_attempt_raw_link_violations=info.get(
+            "first_attempt_raw_link_violations"
+        ),
     )
