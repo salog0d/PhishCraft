@@ -22,6 +22,9 @@ Two scope decisions follow from that framing:
   no KPI dashboard, and no "if the exploit succeeded, optimize the templates"
   feedback. The generator's success criterion is *constraint satisfaction*,
   verified by the coherence validators and recorded in the provenance log.
+  There **is** a bounded self-refinement edge (see Phase 1.5): the driver
+  feeds the validator's own evidence (`link_fixes`) back into regeneration,
+  but only for constraint repair — never for victim-response optimization.
 
 The pipeline is built as a **Google ADK** agent graph. The orchestrator is the
 ADK `SequentialAgent` itself — a linear, non-autonomous
@@ -65,7 +68,9 @@ pipeline measurable for reproducibility.
      cross-channel failure (`abc123` vs `d6db8064874a`) in the committed sample.
      Since the assembler normalizes stale tokens, this check can no longer fail
      by construction — it is the **delivery guarantee**, not the reliability
-     metric (see below).
+     metric (see below). The prompt teaches the `{{cta-link}}` placeholder
+     convention instead of URL copying; the assembler expands it, and only a
+     stale token the model wrote *anyway* is recorded as a `link_fix`.
    - **Sender vs recipient** — the impersonated persona must never be the
      campaign's own recipient (no CEO writing to herself); campaigns without a
      recorded recipient fail this check. Added after a run of S1 produced
@@ -90,9 +95,26 @@ pipeline measurable for reproducibility.
 - The `LlmAgent` writes only content (persona echo + subject/body), answering
   in a strict 8-line format; the persona in its echo is discarded in favour of
   the deterministic selection derived from the recipient's profile.
+- The prompt teaches the **`{{cta-link}}` placeholder convention**: the model
+  never writes URLs or tracking tokens (the token is seed-derived and
+  unguessable), it writes the placeholder and the assembler substitutes the
+  real landing URL.
 - The deterministic assembler parses the bindings and constructs the
   `GeneratedCampaign` (email + SMS follow-up) with provenance, stamping the
   selected persona into the campaign and every sender.
+
+### Phase 1.5 — Self-refinement (driver-level loop, `agent/driver.py`)
+- After a campaign parses, the driver counts its `link_fixes` (stale tokens
+  the LLM wrote despite the convention). If any exist, it re-runs the pipeline
+  with a **critique** built from those fixes — what was written vs. the
+  correct token, plus a restatement of the placeholder rule — up to
+  `REFINE_EXTRA_ATTEMPTS` rounds.
+- Reflexion-style, but the critic is the deterministic validator's own
+  evidence: no critic LLM, no victim feedback. Only subject/body text is
+  regenerated; the deterministic layer is never touched, so reproducibility
+  is preserved. The critique is a runtime prompt amendment (like
+  `STRICT_FORMAT`): the provenance `prompt_hash` still records the base
+  rendered prompt.
 
 ### Phase 2 — Verification (`validator_agent`)
 - The deterministic validator runs the five coherence checks and emits a
@@ -101,12 +123,14 @@ pipeline measurable for reproducibility.
 ### Phase 3 — Measurement (harness, drives the ADK `Runner`)
 - `measurement/reproduce.py` runs the same spec twice and compares (content
   hash and deterministic-layer hash).
-- `measurement/reliability.py` runs the 10-spec baseline and reports **two**
-  link-consistency numbers: the **raw (pre-assembler) violation rate** —
-  derived from each message's `link_fixes`, i.e. what the LLM wrote before
-  normalization — which is the generator's *reliability* metric, and the
+- `measurement/reliability.py` runs the 10-spec baseline and reports **three**
+  link-consistency numbers: the **first-attempt raw violation rate** — the
+  stale tokens the LLM wrote on its first attempt, before any refinement
+  round, which is the generator's *reliability* metric; the
+  **post-refinement raw violation rate** on the delivered artifact; and the
   **post-assembler failure rate** across all five checks, which is the
-  *delivery guarantee* of the fixed artifact.
+  *delivery guarantee* of the fixed artifact. Refinement activity is reported
+  alongside (attempts distribution, refinement success rate).
 
 ---
 
@@ -121,10 +145,13 @@ flowchart TD
     C -->|CoherenceReport| H[(coherence-reports)]
     C -->|ProvenanceLog| F[(provenance-log)]
     C --> M[measurement harness<br/>reproducibility + reliability]
+    C -.->|critique from link_fixes<br/>driver-level, bounded| R
 ```
 
-There is intentionally **no edge back into generation** — the pipeline is a
-one-way generate-then-verify flow, not an optimization loop.
+The pipeline itself remains one-way: the refinement edge (dashed) is
+implemented by the **driver** re-running the pipeline with an amended prompt,
+not by a stage inside the `SequentialAgent` — still no victim-interaction
+feedback, no autonomy, no optimization loop.
 
 ---
 
@@ -138,7 +165,8 @@ one-way generate-then-verify flow, not an optimization loop.
 - **Determinism** lives in `assemble_campaign` and the deterministic ADK
   stages; the LLM only contributes `subject`/`body` text. Reproducibility is
   therefore measurable: the deterministic layer must match 100%, the content
-  layer is the measured result.
+  layer is the measured result. Self-refinement preserves this: it regenerates
+  content only and never touches ids, persona, URLs, references, or schedule.
 - All contracts are defined and validated by Pydantic v2 models in
   [`app/core/schemas.py`](../app/core/schemas.py); the hand-off shapes are
   documented in [`flow-schema.md`](./flow-schema.md).

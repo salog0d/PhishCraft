@@ -196,7 +196,7 @@ not carry one (and is capped at 1600 characters).
 | Field | Type | Notes |
 |-------|------|-------|
 | `references` | MessageId[] | Ids of earlier messages this one cites (cross-channel). |
-| `link_fixes` | LinkFix[] | Stale tracking tokens the assembler rewrote in the raw model prose; empty = no raw link violation. Feeds the raw (pre-assembler) reliability metric. |
+| `link_fixes` | LinkFix[] | Stale tracking tokens the assembler rewrote in the raw model prose; empty = no raw link violation. Feeds the raw reliability metric. The prompt teaches the `{{cta-link}}` placeholder (expanded by the assembler, never recorded here); with the driver's self-refinement loop, `link_fixes` on the delivered artifact is the *post-refinement* number — the first-attempt number comes from the driver's run_info. |
 | `provenance.prompt_hash` | sha256 hex | sha256 of the fully rendered prompt actually sent. |
 | `provenance.params` | GenerationParams | The params **actually used** by the model call: `temperature: 0.0` (passed via ADK/LiteLlm) and the reproducibility `seed`. `top_p`/`max_tokens` are left at provider defaults and therefore not logged; the seed drives the deterministic layer only and is not passed to the provider (`runtime.seed_supported: false`). |
 
@@ -270,8 +270,10 @@ the recipient's manager, `invoice_payment` → the external supplier).
   failure in the committed sample (`msg-0002` body token `abc123` ≠ CTA token
   `d6db8064874a`). Because the assembler normalizes stale tokens, this check
   cannot fail by construction anymore — it is the *delivery guarantee*; the
-  raw pre-assembler violation rate (from each message's `link_fixes`) is the
-  *reliability* metric.
+  **first-attempt raw violation rate** (the stale tokens the LLM wrote before
+  any refinement round, from the driver's run_info) is the *reliability*
+  metric, and the `link_fixes` on the delivered artifact give the
+  post-refinement number.
 - **Sender vs recipient** — the impersonated persona must never be the
   campaign's own recipient (no CEO writing to herself); campaigns without a
   recorded `recipient` fail this check because the separation cannot be

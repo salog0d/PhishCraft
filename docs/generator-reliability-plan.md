@@ -30,6 +30,18 @@
 > Details in [`data/measurements/README.md`](../data/measurements/README.md)
 > and the [bitácora](./bitacora.md).
 
+> **Self-refinement addendum (Oct 2026).** The generator now *repairs* its own
+> violations instead of only reporting them: the prompt teaches the
+> `{{cta-link}}` placeholder convention (no URLs or tokens in prose), and the
+> driver (`agent/driver.py`) runs a Reflexion-style loop — when a parsed
+> campaign carries stale tokens, it regenerates with a critique built from the
+> `link_fixes` themselves (what was written vs. the correct token), up to two
+> extra rounds, content-only. The harness consequently reports **three**
+> numbers: first-attempt raw violation rate (reliability), post-refinement raw
+> violation rate, and the post-assembler failure rate (delivery guarantee),
+> plus refinement activity. The pre-refinement two-number runs in
+> `data/measurements/` remain the historical baseline.
+
 > **Audience:** an LLM/engineer executing this work with full access to the repo.
 > **Follow the steps in order.** Each step names the files to touch and the
 > acceptance test that proves it is done.

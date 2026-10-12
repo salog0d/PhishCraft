@@ -7,21 +7,31 @@ before these numbers go into the paper.
 
 The original failure (`link_consistency` 10/10) and the "after" result (0/10)
 measure **different layers of the pipeline**, and the 0/10 by itself measures
-the assembler, not the model:
+the assembler, not the model. With the self-refinement loop
+(`agent/driver.py`, Reflexion-style, critique built from `link_fixes`) the
+harness (`measurement/reliability.py`) now reports **three** numbers in
+`reliability.json` plus refinement activity:
 
 | metric | what it measures | where it comes from |
 |---|---|---|
-| **Raw (pre-assembler) violation rate** | how often the **LLM** writes a stale tracking token into its prose — the generator's *reliability* | each message's `link_fixes` (the rewrites `assemble_campaign` applied before normalization; normalization never triggers a retry, so this is first-attempt output) |
-| **Post-assembler failure rate** | whether the **delivered artifact** satisfies all coherence checks — the *delivery guarantee* | the validator's `CoherenceReport` |
+| **First-attempt raw violation rate** (`first_attempt_raw_link_violation_rate`) | how often the **LLM** writes a stale tracking token on its **first, unrefined attempt** — the generator's *reliability* | the driver's run_info (`first_attempt_raw_link_violations`), i.e. the attempt-1 `link_fixes` before any refinement round |
+| **Post-refinement raw violation rate** (`raw_link_violation_rate`) | stale tokens remaining in the **delivered artifact** after refinement rounds | each message's `link_fixes` on the final campaign |
+| **Post-assembler failure rate** (`failure_rate`) | whether the **delivered artifact** satisfies all coherence checks — the *delivery guarantee* | the validator's `CoherenceReport` |
+
+Refinement activity is reported as `n_refined`, `n_refined_to_clean`,
+`refinement_success_rate`, `avg_attempts`, and `attempts_distribution`.
+The generator now teaches the `{{cta-link}}` placeholder convention (the
+assembler expands it; a placeholder is correct behavior and is **not** a
+`link_fix`), so a clean first attempt is the expected outcome — refinement is
+the repair path for models that ignore the convention.
 
 Since the assembler normalizes body links (`normalize_body_links`), the
 post-assembler `link_consistency` check cannot fail by construction: the 0/10
-"after" number is the guarantee, **not** the reliability result. The harness
-(`measurement/reliability.py`) now reports both, in `reliability.json`
-(`raw_link_violation_rate` + `failure_rate`) and in `summary.md`.
+"after" number is the guarantee, **not** the reliability result.
 
-> The historical runs below predate the `link_fixes` recording, so their raw
-> number is unknown — do not backfill it. Re-run the suite to obtain both.
+> The historical runs below predate the `link_fixes` recording **and** the
+> refinement loop, so their first-attempt number is unknown — do not backfill
+> it. Re-run the suite to obtain all three numbers.
 
 ## 2. The sampling parameters actually used
 

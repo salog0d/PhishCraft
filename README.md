@@ -24,7 +24,7 @@
 - **Deterministic persona selection** — the impersonated identity is derived from the `(pretext, recipient)` pair (org chart for executive requests, service desk for IT pretexts, supplier/carrier/bank for BEC pretexts), so the LLM never invents the sender.
 - **Provenance log** — model, parameters, seed, and prompt hash recorded for every artifact.
 - **Synthetic-only data** — the target catalog (12 internal employees + 3 external personas) is generated internally; no external OSINT tools or live collection.
-- **Reproducibility & reliability measurement** — a harness that reruns the same spec with a fixed seed and reports two link-consistency numbers over a 10-spec baseline: the **raw (pre-assembler) violation rate** (generator reliability, from the stale tokens the LLM wrote) and the **post-assembler failure rate** (delivery guarantee, by construction 0 for links).
+- **Reproducibility & reliability measurement** — a harness that reruns the same spec with a fixed seed and reports three link-consistency numbers over a 10-spec baseline: the **first-attempt raw violation rate** (generator reliability, from the stale tokens the LLM wrote before any refinement round), the **post-refinement raw violation rate** (what remains on the delivered artifact), and the **post-assembler failure rate** (delivery guarantee, by construction 0 for links). A driver-level self-refinement loop (critique from the validator's own `link_fixes`, `{{cta-link}}` placeholder convention) repairs violations before delivery.
 - **Built-in authorization gate** — every campaign must be attested as authorized before generation runs.
 
 ---
