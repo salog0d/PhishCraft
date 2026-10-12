@@ -107,7 +107,8 @@ def test_config_coerces_integers(tmp_path, monkeypatch):
 
 def test_help_lists_commands(shell):
     out = _run(shell, "/help")
-    for cmd in ("generate", "validate", "measure", "reproduce", "config"):
+    for cmd in ("generate", "validate", "measure", "reproduce", "config",
+                "replay", "replay-logs"):
         assert f"/{cmd}" in out
 
 
@@ -183,6 +184,121 @@ def test_generate_with_stub_adapter_is_offline(shell, tmp_path):
     assert shell.last_report is not None
     saved = shell.last_paths["campaign"]
     assert saved.exists() and str(tmp_path) in str(saved)
+
+
+# --------------------------------------------------------------------------- #
+# Run manifest + provenance logging + replay
+# --------------------------------------------------------------------------- #
+
+
+def _runs(tmp_path):
+    return json.loads((tmp_path / "out" / "runs.json").read_text(encoding="utf-8"))
+
+
+def _provenance(tmp_path):
+    return json.loads(
+        (tmp_path / "out" / "q3-awareness-2026" / "provenance.json")
+        .read_text(encoding="utf-8")
+    )
+
+
+def _setup_stub(shell, tmp_path):
+    _run(shell, "/config adapter stub")
+    _run(shell, f"/config output_dir {tmp_path / 'out'}")
+
+
+def test_generate_writes_the_run_manifest_and_provenance(shell, tmp_path):
+    _setup_stub(shell, tmp_path)
+    _run(shell, "/generate")
+    runs = _runs(tmp_path)
+    assert len(runs) == 1
+    entry = runs[0]
+    assert entry["kind"] == "generate"
+    assert entry["adapter"] == "stub"
+    assert entry["model"] == shell.cfg["model"]
+    assert entry["report"]["all_passed"] is True
+    assert entry["spec"]["seed"] == shell.cfg["seed"]
+    prov = _provenance(tmp_path)
+    assert prov["campaign_id"] == "q3-awareness-2026"
+    assert len(prov["messages"]) == 2
+    assert prov["messages"][0]["provenance"]["prompt_hash"]
+    assert prov["messages"][0]["link_fixes"] == []
+
+
+def test_replay_reruns_the_last_execution_and_links_it(shell, tmp_path):
+    _setup_stub(shell, tmp_path)
+    _run(shell, "/generate")
+    first_id = _runs(tmp_path)[0]["run_id"]
+    out = _run(shell, "/replay")
+    runs = _runs(tmp_path)
+    assert len(runs) == 2
+    assert runs[1]["kind"] == "replay"
+    assert runs[1]["parent_run_id"] == first_id
+    assert runs[1]["adapter"] == "stub"
+    assert shell.last_campaign is not None
+    assert shell.last_run["run_id"] == runs[1]["run_id"]
+    assert "validator report" in out
+    assert first_id in out  # the replay names what it re-ran
+
+
+def test_replay_before_any_generate_is_graceful(shell, tmp_path):
+    _run(shell, f"/config output_dir {tmp_path / 'out'}")
+    out = _run(shell, "/replay")
+    assert "nothing to replay" in out
+
+
+def test_replay_uses_the_recorded_adapter_not_the_current_one(shell, tmp_path):
+    _setup_stub(shell, tmp_path)
+    _run(shell, "/generate")
+    _run(shell, "/config adapter adk")  # would need an API key...
+    out = _run(shell, "/replay")        # ...but the replay stays offline (stub)
+    assert "validator report" in out
+    assert _runs(tmp_path)[-1]["adapter"] == "stub"
+
+
+def test_replay_logs_shows_the_last_replay(shell, tmp_path):
+    _setup_stub(shell, tmp_path)
+    _run(shell, "/generate")
+    _run(shell, "/replay")
+    out = _run(shell, "/replay-logs")
+    replay_id = _runs(tmp_path)[-1]["run_id"]
+    assert replay_id in out
+    assert "prompt_hash" in out  # the provenance log is rendered
+
+
+def test_replay_logs_before_any_replay_is_graceful(shell, tmp_path):
+    _setup_stub(shell, tmp_path)
+    _run(shell, "/generate")
+    out = _run(shell, "/replay-logs")
+    assert "no replay recorded" in out
+
+
+def test_replay_logs_accepts_a_run_id(shell, tmp_path):
+    _setup_stub(shell, tmp_path)
+    _run(shell, "/generate")
+    first = _runs(tmp_path)[0]
+    out = _run(shell, f"/replay-logs {first['run_id']}")
+    assert first["run_id"] in out
+    assert "generate" in out
+
+
+def test_replay_logs_rejects_an_unknown_run_id(shell, tmp_path):
+    _setup_stub(shell, tmp_path)
+    _run(shell, "/generate")
+    out = _run(shell, "/replay-logs run-999-000000")
+    assert "no run" in out
+
+
+def test_manifest_self_heals_on_corrupt_file(tmp_path):
+    from ptshell import runlog
+
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "runs.json").write_text("{ not json", encoding="utf-8")
+    assert runlog.load_manifest(out) == []
+    runlog.append_manifest(out, {"run_id": "run-001-test"})
+    assert runlog.last_entry(out)["run_id"] == "run-001-test"
+    assert runlog.next_run_id(out).startswith("run-002-")
 
 
 def test_quit_returns_true(shell):

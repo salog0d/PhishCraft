@@ -98,6 +98,8 @@ pt> /generate            # call the model, build + validate the campaign
 | `/validate [file.json]` | Run the 5 coherence checks on a campaign file (defaults to the last generated campaign). |
 | `/measure [--runs=N]` | Run the 10-spec reliability suite; prints the failure-rate summary. |
 | `/reproduce [all]` | Run the same spec twice and compare (default: spec S1, seed 42). |
+| `/replay` | Re-run the last execution recorded in the run manifest (same spec, adapter, and model as the recorded run) and show it again. |
+| `/replay-logs [run_id]` | Show the manifest entry + provenance log of the most recent replay (or of any recorded run) in the terminal. |
 | `/send` | Deliver the last campaign to the local MailHog inbox. |
 | `/status` | Settings + summary of the last run. |
 | `/quit` | Exit (also `/exit`, Ctrl-D). |
@@ -118,6 +120,10 @@ pt> /validate data/measurements/known-case/generated_campaign.json
 # The paper's two measurements
 pt> /measure            # 10 specs → failure rate per coherence check
 pt> /reproduce          # S1 twice → identical? (seed-42 reproducibility)
+
+# Re-run and audit the last execution
+pt> /replay             # re-executes the run recorded in data/shell/runs.json
+pt> /replay-logs        # manifest entry + provenance log of the replay
 ```
 
 ## 5. Configuration reference
@@ -139,7 +145,7 @@ Unknown keys and invalid values are rejected with the valid options listed.
 | `followup_minutes` | `75` | SMS is scheduled this many minutes after the email |
 | `adapter` | `adk` | `adk` (real ADK pipeline, needs a key) or `stub` (offline, §7) |
 | `mission` | `config/q3-awareness-2026.mission.json` | mission file (authorization gate, model policy) |
-| `output_dir` | `data/shell` | where `/generate` saves `generated_campaign.json` + `coherence_report.json` |
+| `output_dir` | `data/shell` | where `/generate` and `/replay` save `generated_campaign.json`, `coherence_report.json`, and `provenance.json` per campaign, plus the `runs.json` run manifest (§8) |
 
 ## 6. Models & API keys
 
@@ -162,11 +168,40 @@ Switching models mid-session is fine — the change applies to the next
 pt> /config adapter stub
 ```
 
-With the stub adapter, `/generate`, `/measure`, and `/reproduce` run through
-the same deterministic assembler + validator with fixed content — no LLM call,
-no network, no key. Ideal for demos, CI, and learning the commands.
+With the stub adapter, `/generate`, `/replay`, `/measure`, and `/reproduce`
+run through the same deterministic assembler + validator with fixed content —
+no LLM call, no network, no key. Ideal for demos, CI, and learning the
+commands. A replay always re-runs with the adapter **recorded in the
+manifest**, so replaying a stub run stays offline even if you switched the
+config to `adk` afterwards.
 
-## 8. Measuring (the reproducibility & reliability results)
+## 8. Run manifest & provenance logging
+
+Every execution — `/generate` **and** `/replay` — writes two things into
+`data/shell/` (the `output_dir`):
+
+- **`runs.json` — the run manifest** (append-only). One entry per execution:
+  `run_id`, `kind` (`generate` | `replay`), `parent_run_id` (which run a
+  replay re-ran), timestamp, adapter, model, the full spec, the written file
+  paths, the refinement metadata (`n_attempts`, `refined`,
+  `first_attempt_raw_link_violations`), and the validator verdict.
+- **`<campaign_id>/provenance.json` — the provenance log.** The campaign's
+  persona plus every message's `GenerationProvenance` (model, params, seed,
+  prompt template id, prompt hash, runtime) and its `link_fixes`.
+
+```bash
+pt> /generate
+pt> /replay               # re-runs the run recorded as the last manifest entry
+pt> /replay-logs          # prints the replay's manifest entry + provenance log
+pt> /replay-logs run-001-091523   # or any recorded run_id
+```
+
+`/replay` re-executes the last entry as it was recorded — same spec, adapter,
+and model — even if you changed the settings in the meantime, then appends a
+new `replay` entry linking back to it. The manifest is plain JSON, so it can
+be diffed or archived as audit evidence alongside the campaigns.
+
+## 9. Measuring (the reproducibility & reliability results)
 
 - **`/reproduce`** writes `data/measurements/reproduce-<adapter>/`:
   `reproducibility.json` plus one `run-NN.campaign.json` /
@@ -174,12 +209,14 @@ no network, no key. Ideal for demos, CI, and learning the commands.
   are **identical** and whether the **deterministic layer** (ids, persona,
   URLs, references, schedule, provenance) matched.
 - **`/measure`** writes `data/measurements/reliability-<adapter>-<timestamp>/`:
-  `reliability.json` (machine-readable) and `summary.md` with **two**
-  link-consistency numbers: the **raw (pre-assembler) violation rate** — the
+  `reliability.json` (machine-readable) and `summary.md` with **three**
+  link-consistency numbers: the **first-attempt raw violation rate** — the
   generator's *reliability* metric, from the stale tokens the LLM wrote before
-  the assembler normalized them — and the **post-assembler failure rate**
+  any refinement round — the **post-refinement raw violation rate** on the
+  delivered artifact, and the **post-assembler failure rate**
   across all five checks, the *delivery guarantee* of the delivered artifact.
-  **Both go in the paper; they are not the same thing.**
+  Refinement activity (attempts, success rate) is reported alongside.
+  **They all go in the paper; they are not the same thing.**
 
 Both also exist as plain CLIs (no shell needed):
 
@@ -188,7 +225,7 @@ python -m measurement.reproduce   --adapter adk --spec-id S1 --runs 2
 python -m measurement.reliability --adapter adk --runs 1
 ```
 
-## 9. Sending a campaign to the sandbox inbox
+## 10. Sending a campaign to the sandbox inbox
 
 ```bash
 # terminal 1 — start the SMTP sink (once)
@@ -202,7 +239,7 @@ pt> /send        # delivers the last campaign; open http://localhost:8025
 
 Email messages arrive as email; SMS messages arrive tagged `[SMS]`.
 
-## 10. Non-interactive use
+## 11. Non-interactive use
 
 If you prefer scripts over the REPL, the same pipeline is available as a CLI:
 
@@ -211,7 +248,7 @@ ADK_MODEL=deepseek/deepseek-chat python -m generator_agent.run \
     --pretext executive_request --difficulty medium --seed 42
 ```
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
@@ -224,13 +261,14 @@ ADK_MODEL=deepseek/deepseek-chat python -m generator_agent.run \
 | Want a different settings file | `PTSHELL_CONFIG=/path/config.json python -m ptshell`. |
 | DeepSeek calls are slow / timing out | The adapter streams with a 120 s read timeout; retry or switch model with `/model gemini-2.5-flash`. |
 
-## 12. File map (where things live)
+## 13. File map (where things live)
 
 | What | Where |
 |---|---|
-| PhishCraft shell code | `ptshell/` (`shell.py` = commands + UI, `config.py` = settings) |
+| PhishCraft shell code | `ptshell/` (`shell.py` = commands + UI, `config.py` = settings, `runlog.py` = manifest + provenance logging) |
 | Settings / history | `~/.pt-shell/config.json` · `~/.pt-shell/history` |
 | Generated campaigns (shell) | `data/shell/<campaign_id>/` |
+| Run manifest / provenance logs | `data/shell/runs.json` · `data/shell/<campaign_id>/provenance.json` |
 | Reliability / reproducibility results | `data/measurements/…` |
 | Mission config | `config/q3-awareness-2026.mission.json` |
 | Personas | `org/fantazylabz_org.json` + `org/external_personas.json` |

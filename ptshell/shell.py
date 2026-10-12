@@ -67,6 +67,8 @@ COMMANDS: dict[str, str] = {
     "validate": "run the 5 coherence checks on a campaign file",
     "measure": "run the 10-spec reliability suite (writes summary.md)",
     "reproduce": "run the same spec twice and compare (default: S1)",
+    "replay": "re-run the last execution (from the run manifest) and show it again",
+    "replay-logs": "show the manifest entry + provenance log of the last replay",
     "send": "deliver the last generated campaign to MailHog",
     "status": "show current settings and the last run summary",
     "quit": "exit the shell (also /exit or Ctrl-D)",
@@ -94,6 +96,7 @@ class PtShell:
         self.last_report = None
         self.last_paths: dict[str, Path] = {}
         self.last_recipient: dict | None = None
+        self.last_run: dict | None = None  # manifest entry of the last execution
 
     # ------------------------------------------------------------------ #
     # small rendering helpers
@@ -235,7 +238,9 @@ class PtShell:
             return False
         parts = shlex.split(line)
         command, arg = parts[0], " ".join(parts[1:])
-        handler = getattr(self, f"cmd_{command}", None)
+        # multi-word commands are written with dashes (/replay-logs) and map
+        # to cmd_* methods with underscores (cmd_replay_logs).
+        handler = getattr(self, f"cmd_{command.replace('-', '_')}", None)
         if handler is None:
             self.console.print(
                 f"[red]unknown command[/red] '{command}' — "
@@ -368,6 +373,63 @@ class PtShell:
             Text("  (saved)", style="dim")
         )
 
+    def _execute(self, spec: dict, mission: dict, adapter: str):
+        """Run the pipeline through the configured/recorded adapter.
+
+        Returns ``(campaign, report, run_info)`` — the driver's refinement
+        metadata is recorded in the run manifest alongside the artifacts.
+        """
+        if adapter == "stub":
+            from measurement.adapters import get_adapter
+
+            return get_adapter("stub").run_with_info(spec, mission)
+        from agent.driver import run_pipeline_with_info
+
+        return run_pipeline_with_info(spec, mission)
+
+    def _record_run(
+        self, kind: str, adapter: str, spec: dict, mission: dict, campaign,
+        report, run_info: dict | None = None, parent_run_id: str | None = None,
+    ) -> dict:
+        """Persist the execution: artifacts, provenance log, manifest entry."""
+        from ptshell import runlog
+
+        out = Path(self.cfg["output_dir"]) / mission["campaign_id"]
+        out.mkdir(parents=True, exist_ok=True)
+        campaign_path = out / "generated_campaign.json"
+        report_path = out / "coherence_report.json"
+        campaign_path.write_text(campaign.model_dump_json(indent=2), encoding="utf-8")
+        report_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+        provenance_path = runlog.write_provenance(campaign, out)
+
+        run_id = runlog.next_run_id(self.cfg["output_dir"])
+        entry = runlog.build_entry(
+            run_id=run_id,
+            kind=kind,
+            parent_run_id=parent_run_id,
+            adapter=adapter,
+            model=self.cfg["model"],
+            spec=spec,
+            files={
+                "campaign": campaign_path,
+                "report": report_path,
+                "provenance": provenance_path,
+            },
+            run_info=run_info,
+            report=report,
+        )
+        runlog.append_manifest(self.cfg["output_dir"], entry)
+
+        self.last_campaign = campaign
+        self.last_report = report
+        self.last_paths = {
+            "campaign": campaign_path,
+            "report": report_path,
+            "provenance": provenance_path,
+        }
+        self.last_run = entry
+        return entry
+
     def cmd_generate(self, arg: str) -> None:
         mission = self._mission()
         spec = self._build_spec(mission)
@@ -376,34 +438,26 @@ class PtShell:
             f"[{PURPLE_BRIGHT}]generating with {self.cfg['model']} "
             f"(adapter: {self.cfg['adapter']})…[/{PURPLE_BRIGHT}]"
         ):
-            if self.cfg["adapter"] == "stub":
-                from measurement.adapters import get_adapter
-
-                campaign, report = get_adapter("stub").run(spec, mission)
-            else:
-                from agent.driver import run_pipeline
-
-                campaign, report = run_pipeline(spec, mission)
-
-        out = Path(self.cfg["output_dir"]) / mission["campaign_id"]
-        out.mkdir(parents=True, exist_ok=True)
-        campaign_path = out / "generated_campaign.json"
-        report_path = out / "coherence_report.json"
-        campaign_path.write_text(campaign.model_dump_json(indent=2), encoding="utf-8")
-        report_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+            campaign, report, info = self._execute(
+                spec, mission, self.cfg["adapter"]
+            )
 
         from generator_agent.catalog import profile_for
 
-        self.last_campaign = campaign
-        self.last_report = report
-        self.last_paths = {"campaign": campaign_path, "report": report_path}
         self.last_recipient = profile_for(
             spec["recipient_id"], pretext=spec["pretext"]
         )
+        entry = self._record_run(
+            "generate", self.cfg["adapter"], spec, mission, campaign, report,
+            run_info=info,
+        )
 
         self._render_campaign(campaign, report)
-        self._dim(f"saved: {campaign_path}")
-        self._dim(f"saved: {report_path}")
+        self._dim(f"run: {entry['run_id']}  ({entry['adapter']} · "
+                  f"{entry['model']})")
+        self._dim(f"saved: {self.last_paths['campaign']}")
+        self._dim(f"saved: {self.last_paths['report']}")
+        self._dim(f"saved: {self.last_paths['provenance']}")
 
     def cmd_validate(self, arg: str) -> None:
         from app.core.schemas import GeneratedCampaign
@@ -502,6 +556,112 @@ class PtShell:
         self.console.print(table)
         self._dim(f"saved: {results['out_dir']}")
 
+    def cmd_replay(self, arg: str) -> None:
+        """Re-run the last execution recorded in the run manifest."""
+        from ptshell import runlog
+
+        entry = runlog.last_entry(self.cfg["output_dir"])
+        if entry is None:
+            self._dim("nothing to replay — the run manifest is empty; "
+                      "/generate first")
+            return
+        spec, adapter, model = entry["spec"], entry["adapter"], entry["model"]
+        mission = self._mission()
+        self._dim(
+            f"replaying {entry['run_id']} ({adapter} · {model}) — recorded in "
+            f"{runlog.manifest_path(self.cfg['output_dir'])}"
+        )
+
+        saved_model = self.cfg["model"]
+        try:
+            # Point the pipeline at the *recorded* model — a replay re-runs the
+            # last execution as it was, not the current settings.
+            self.cfg["model"] = model
+            self._apply_model()
+            with self.console.status(
+                f"[{PURPLE_BRIGHT}]replaying {entry['run_id']} "
+                f"(adapter: {adapter})…[/{PURPLE_BRIGHT}]"
+            ):
+                campaign, report, info = self._execute(spec, mission, adapter)
+        finally:
+            self.cfg["model"] = saved_model
+            self._active_model = None  # force re-resolve on the next run
+
+        replay_entry = self._record_run(
+            "replay", adapter, spec, mission, campaign, report,
+            run_info=info, parent_run_id=entry["run_id"],
+        )
+        self._render_campaign(campaign, report)
+        self._dim(f"replay run: {replay_entry['run_id']}  "
+                  f"(replayed {entry['run_id']})")
+        self._dim(f"saved: {self.last_paths['campaign']}")
+        self._dim(f"saved: {self.last_paths['provenance']}")
+
+    def cmd_replay_logs(self, arg: str) -> None:
+        """Show the manifest entry + provenance log of the last replay.
+
+        ``/replay-logs`` shows the most recent replay; ``/replay-logs <run_id>``
+        shows any run recorded in the manifest.
+        """
+        from ptshell import runlog
+
+        tokens = shlex.split(arg)
+        entries = runlog.load_manifest(self.cfg["output_dir"])
+        if tokens:
+            entry = next((e for e in entries if e["run_id"] == tokens[0]), None)
+            if entry is None:
+                self._err(f"no run '{tokens[0]}' in the manifest")
+                return
+        else:
+            replays = [e for e in entries if e["kind"] == "replay"]
+            if not replays:
+                self._dim("no replay recorded yet — /replay first")
+                return
+            entry = replays[-1]
+
+        body = Text()
+        body.append("run_id     ", style="bold")
+        body.append(f"{entry['run_id']}\n")
+        body.append("kind       ", style="bold")
+        body.append(entry["kind"])
+        if entry.get("parent_run_id"):
+            body.append(f"  (replayed {entry['parent_run_id']})")
+        body.append("\n")
+        body.append("started_at ", style="bold")
+        body.append(f"{entry['started_at']}\n")
+        body.append("adapter    ", style="bold")
+        body.append(f"{entry['adapter']}  ·  model: {entry['model']}\n")
+        body.append("campaign   ", style="bold")
+        body.append(f"{entry['campaign_id']}\n")
+        body.append("refinement ", style="bold")
+        body.append(f"{entry.get('refinement') or '—'}\n")
+        if entry.get("report"):
+            verdict = (
+                "✓ all passed"
+                if entry["report"]["all_passed"]
+                else f"✗ failing: {', '.join(entry['report']['failing'])}"
+            )
+            body.append("validator  ", style="bold")
+            body.append(verdict, style=(
+                "green" if entry["report"]["all_passed"] else "bold red"
+            ))
+            body.append("\n")
+        body.append("files      ", style="bold")
+        for key, value in entry.get("files", {}).items():
+            body.append(f"\n  {key:<11} {value}", style="dim")
+        self._panel(body, f"run log · {entry['run_id']}")
+
+        provenance_path = entry.get("files", {}).get("provenance")
+        if provenance_path and Path(provenance_path).exists():
+            raw = Path(provenance_path).read_text(encoding="utf-8")
+            self._panel(
+                Text(raw, style="dim"),
+                f"provenance · {provenance_path}",
+                border=PURPLE_SOFT,
+            )
+        else:
+            self._dim("provenance log not found for this run")
+
     def cmd_send(self, arg: str) -> None:
         from generator_agent.send import send_campaign
 
@@ -534,6 +694,12 @@ class PtShell:
         body = Text()
         body.append("campaign   ", style="bold")
         body.append(self.last_campaign.campaign_id + "\n")
+        if self.last_run:
+            body.append("run        ", style="bold")
+            run_desc = f"{self.last_run['run_id']} ({self.last_run['kind']})"
+            if self.last_run.get("parent_run_id"):
+                run_desc += f", replayed {self.last_run['parent_run_id']}"
+            body.append(run_desc + "\n")
         failing = [r.check.value for r in self.last_report.results if not r.passed]
         body.append("all_passed ", style="bold")
         verdict = "✓ True" if self.last_report.all_passed else "✗ False"
