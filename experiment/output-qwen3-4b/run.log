@@ -1,0 +1,9 @@
+pipeline: campaign=q3-awareness-2026 recipient=Rajesh Kapoor pretext=executive_request tone=urgent difficulty=medium seed=42 model=ollama/qwen3:4b
+saved: /home/salog0d/PhishingTool/experiment/output-qwen3-4b/generated_campaign.json
+saved: /home/salog0d/PhishingTool/experiment/output-qwen3-4b/coherence_report.json
+saved: /home/salog0d/PhishingTool/experiment/output-qwen3-4b/run_info.json
+saved: /home/salog0d/PhishingTool/experiment/output-qwen3-4b/llm_trace.jsonl
+persona: Elena Marchetti <elena.marchetti@fantazylabz.tech> — 2 messages
+validator: all_passed=True (persona_identity=true, timing=true, cross_channel_reference=true, link_consistency=true, sender_recipient=true)
+run_info: n_attempts=1 refined=False first_attempt_raw_link_violations=0
+
