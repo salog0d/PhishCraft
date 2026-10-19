@@ -95,7 +95,87 @@ uvicorn app.main:app --reload
 
 ---
 
-## PhishCraft — interactive shell (harness)
+## Local models with Ollama (NVIDIA GeForce RTX 3070)
+
+PhishCraft can generate entirely offline through [Ollama](https://ollama.com/).
+The pipeline was validated on an **RTX 3070 (8 GB VRAM)**: the sweet spot is
+**7–8B models at 4-bit quantization**, plus fast 3–4B models. These local models
+satisfy the multi-model / cross-family requirement of `model_policy` without
+any API key, and keep every artifact on this machine.
+
+### Recommended models
+
+| Model | Pull command | Size (Q4) | Fits in 8 GB? | Why for PhishCraft |
+|---|---|---|---|---|
+| **Qwen3 8B** | `ollama pull qwen3:8b` | ~5.4 GB | ✅ comfortable | Best all-rounder: strong Spanish/Portuguese (LATAM config), reliable JSON for the assembler/validator schema |
+| **Llama 3.1 8B** | `ollama pull llama3.1:8b` | ~4.9 GB | ✅ comfortable | Reliable general writer for email/SMS copy; second model family for cross-family runs |
+| **Gemma 3 4B** | `ollama pull gemma3:4b` | ~3.4 GB | ✅ lots of headroom | 140+ languages, good instruction following, fast |
+| **Qwen3 4B** | `ollama pull qwen3:4b` | ~2.6 GB | ✅ lots of headroom | Fast, multilingual, very good JSON reliability |
+| **Phi-4 Mini** | `ollama pull phi4-mini` | ~2.5 GB | ✅ lots of headroom | Strong structured output / reasoning for the validation-side work |
+| **Llama 3.2 3B** | `ollama pull llama3.2:3b` | ~2.0 GB | ✅ fastest | High-throughput drafting when generating volume |
+| **DeepSeek-R1 7B** | `ollama pull deepseek-r1:7b` | ~4.7 GB | ✅ comfortable | Reasoning model for the self-refinement / critique loop |
+
+**Avoid** models ≥ 12–14B (`phi4:14b`, `gemma3:12b`, `mistral-small3.1:24b`):
+their weights alone need 9–17 GB and spill into CPU RAM, making generation
+painfully slow on this card.
+
+**Picks for the pipeline:** `qwen3:8b` as the primary generator and
+`llama3.1:8b` as the second family (cross-family comparison); `gemma3:4b` as a
+lightweight fallback.
+
+### Install Ollama
+
+```bash
+# Linux / WSL2 (auto-detects the NVIDIA GPU via CUDA)
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+- **macOS / Windows:** download the installer from
+  <https://ollama.com/download>.
+- **NVIDIA driver:** Ollama 0.22+ ships CUDA support out of the box; make sure
+  the proprietary NVIDIA driver is installed (`nvidia-smi` must list the GPU).
+
+### Pull the models and verify the GPU
+
+```bash
+# Pull the validated local set (~25 GB total)
+ollama pull qwen3:8b
+ollama pull llama3.1:8b
+ollama pull gemma3:4b
+ollama pull qwen3:4b
+ollama pull phi4-mini
+ollama pull llama3.2:3b
+ollama pull deepseek-r1:7b
+
+# Sanity check
+ollama run qwen3:8b "Write one short test sentence."
+ollama list      # shows every model + disk size
+ollama ps        # while running: confirms the model sits on the GPU, not CPU
+```
+
+### Use them with PhishCraft
+
+The generator resolves the model from `ADK_MODEL` (see
+[Configuration](#configuration)). Ollama exposes an OpenAI-compatible endpoint
+at `http://localhost:11434/v1`, so any `litellm`-style adapter can point at it:
+
+```bash
+# Example: generate through the local Qwen3 8B
+ADK_MODEL=ollama/qwen3:8b python -m generator_agent.run \
+    --pretext executive_request \
+    --difficulty medium \
+    --seed 42
+```
+
+> **Note:** `agent/config.py` routes both the `deepseek/` and `ollama/`
+> prefixes through the LiteLlm wrapper (`OLLAMA_API_BASE` defaults to
+> `http://localhost:11434`). Set `ADK_MODEL_TRACE_FILE` to capture every LLM
+> call — prompt, thinking, answer, usage — as JSONL (see
+> `scripts/ollama_experiment.py` and `scripts/read_trace.py`).
+
+> **VRAM note:** keep the context window modest — `num_ctx` 4096–8192 — because
+> the KV cache shares the same 8 GB. Structured output is available via
+> `format=json` on all models listed above.
 
 `python -m ptshell` opens **PhishCraft**, a Claude-Code-style interactive
 REPL over the generator: a purple-and-white styled terminal UI with an ASCII
@@ -261,6 +341,7 @@ Every file's job, grouped by directory.
 - **Architecture & pipeline design:** [`docs/architecture.md`](./docs/architecture.md)
 - **Data contracts (JSON):** [`docs/flow-schema.md`](./docs/flow-schema.md)
 - **Model catalog (cross-family study):** [`docs/models.md`](./docs/models.md)
+- **Local models on Ollama (RTX 3070):** [README section](#local-models-with-ollama-nvidia-geforce-rtx-3070)
 - **Lab notebook:** [`docs/bitacora.md`](./docs/bitacora.md)
 - **Architecture diagrams:** [`diagrams_output/`](./diagrams_output/) — regenerate with `python3 scripts/generate_diagrams.py`
 - **API reference:** available at `/docs` when the service is running.
