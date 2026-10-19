@@ -18,6 +18,11 @@ from google.adk.agents import LlmAgent, SequentialAgent
 
 from agent.assembler import AssemblerAgent
 from agent.config import resolve_model
+from agent.model_trace import (
+    after_model_callback,
+    before_model_callback,
+    on_model_error_callback,
+)
 from agent.validator import ValidatorAgent
 from generator_agent.assemble import CHARTER
 
@@ -57,6 +62,12 @@ generator_content_agent = LlmAgent(
     # generator_agent.assemble.LINK_PLACEHOLDER and test_refinement.py).
     instruction=CHARTER + BINDINGS_CONTRACT,
     output_key="raw_bindings",
+    # Full-trace hooks: no-ops unless ADK_MODEL_TRACE_FILE is set (the
+    # experiment harness points it at output-<model>/llm_trace.jsonl so every
+    # model's thinking process is saved next to its artifacts).
+    before_model_callback=before_model_callback,
+    after_model_callback=after_model_callback,
+    on_model_error_callback=on_model_error_callback,
 )
 
 root_agent = SequentialAgent(
