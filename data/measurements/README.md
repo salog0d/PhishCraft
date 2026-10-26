@@ -99,3 +99,21 @@ here because no normalization existed yet)
   prose varies slightly between provider calls at temperature 0.0. The
   deterministic layer is this codebase's guarantee; the prose variance is the
   provider's, and unseeded sampling makes it expected.
+
+## 4. Quality numbers (the post-run scan) are evidence, not cleanup
+
+Every run — reliability, quality suite, and the shell's `/generate` — now also
+gets the post-run **quality scan** (`quality_agent/scan.py`, the COVA-X-style
+lifecycle). The extra numbers in `reliability.json` / `quality.json`:
+
+| metric | what it measures | where it comes from |
+|---|---|---|
+| `quality_flag_rate` / `quality_finding_counts` | content-quality findings across the 9 check categories (dialogue collapse, stage direction, turn overflow, meta bleed, loop detection + 4 contamination categories) | `quality_agent/artifacts.py` + `contamination.py`, on the delivered artifact |
+| `contamination_rate` | how often another pretext's lexicon, a foreign roster name, a wrong brand, or non-Latin script leaks into a campaign | `quality_agent/contamination.py` (≥ 2 distinct foreign terms for lexicon bleed — one shared word is noise) |
+| `label_correction_rate` | how often the deterministic labeler disagrees with the spec labels (pretext/tone/difficulty) — the paper's relabeling analogue; `unverifiable` predictions are deferred, not forced | `quality_agent/labels.py` |
+| `strip_affected_rate` / `total_stripped_chars` | how much stage-direction content a strip pass would remove — measured on a copy, never applied; the delivered artifacts stay untouched | `quality_agent/strip.py` |
+
+The scan never repairs anything: a quality flag is a recorded data point about
+the generator, not a cleanup of its output. The coherence checks
+(`CoherenceReport`) remain the delivery guarantee; the quality scan is the
+content-quality evidence layer on top of it.

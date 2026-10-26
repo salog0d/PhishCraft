@@ -43,6 +43,7 @@ pipeline measurable for reproducibility.
 | `generator_content_agent` | ADK `LlmAgent` | Emits the 8 content bindings (persona echo + email subject/body + SMS body) in the requested tone/difficulty/language. Writes nothing structural; the persona it echoes is ignored — the deterministic layer picks it. |
 | `assembler_agent` | ADK `BaseAgent` (deterministic) | Builds the `GeneratedCampaign`: ids, persona stamping (the identity derived from `pretext × recipient` via `catalog.persona_for`), seed-derived tracking URL, spec-derived schedule, references, and provenance are all decided in code. |
 | `validator_agent` | ADK `BaseAgent` (deterministic) | Runs the five coherence checks and emits the `CoherenceReport`. |
+| quality scanner | `quality_agent.scan` (deterministic, post-run) | Runs on **every** generation (harness + shell): the five generation-artifact checks, the four contamination checks, the stage-direction stripping pass (measured on a copy), and the automated label audit. Emits the `QualityReport` — evidence, never repairs. |
 
 ### Core building blocks
 
@@ -131,6 +132,11 @@ pipeline measurable for reproducibility.
   **post-assembler failure rate** across all five checks, which is the
   *delivery guarantee* of the fixed artifact. Refinement activity is reported
   alongside (attempts distribution, refinement success rate).
+- `measurement/quality.py` (and the per-run scan wired into `runner.py`) adds
+  the post-run **quality lifecycle**: flag rates per check category and per
+  pretext, contamination rates, the automated label audit's correction rate,
+  and the stage-direction stripping statistics. These numbers measure the
+  generator's content quality; the scanner never mutates the artifacts.
 
 ---
 
@@ -144,7 +150,9 @@ flowchart TD
     B --> G[(generated-campaigns)]
     C -->|CoherenceReport| H[(coherence-reports)]
     C -->|ProvenanceLog| F[(provenance-log)]
-    C --> M[measurement harness<br/>reproducibility + reliability]
+    C --> Q[quality scanner<br/>deterministic, post-run]
+    Q -->|QualityReport| QS[(quality-reports)]
+    C --> M[measurement harness<br/>reproducibility + reliability + quality]
     C -.->|critique from link_fixes<br/>driver-level, bounded| R
 ```
 

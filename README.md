@@ -79,10 +79,16 @@ python -m generator_agent.run \
 # → data/q3-awareness-2026/generated_campaign.json
 # → data/q3-awareness-2026/coherence_report.json
 
-# Measure reproducibility (same spec twice) and reliability (10 specs)
+# Measure reproducibility (same spec twice), reliability (10 specs), and
+# run the post-run quality lifecycle (every run is scanned)
 python -m measurement.reproduce   --adapter adk --spec-id S1 --runs 2
 python -m measurement.reliability --adapter adk --runs 1
+python -m measurement.quality     --adapter adk --runs 1
 # → data/measurements/.../reproducibility.json + reliability.json + summary.md
+# → data/measurements/.../quality.json + quality-summary.md
+#   (artifact scan, contamination scan, stage-direction stripping stats,
+#    automated label audit — the COVA-X-style quality lifecycle, recorded
+#    on every run; findings are evidence, never repairs)
 ```
 
 Prefer the HTTP service? The same engine is exposed as an API:
@@ -195,10 +201,11 @@ python -m ptshell
 |---------|--------------|
 | `/help` | List commands. |
 | `/config [key [value]]` | View or set settings (e.g. `/config seed 7`, `/config pretext invoice_payment`); `/config reset` restores defaults. |
-| `/model <id>` · `/models` | Set or list the generation model (e.g. `deepseek/deepseek-chat`). Model switches apply to the next `/generate`. |
+| `/model <id>` · `/models` | Set or list the generation model (e.g. `deepseek/deepseek-chat`, or `ollama/qwen3:8b` for a local model — `/models` and Tab-completion discover them live from `ollama list`). Model switches apply to the next `/generate`. |
 | `/recipient <id>` · `/recipients` | Set the default recipient or list the target catalog (12 internal + supplier/bank/carrier). |
-| `/generate` | Run the ADK pipeline once with the current settings; prints the campaign + the 5-check validator report and saves both under `data/shell/<campaign_id>/`. |
+| `/generate` | Run the ADK pipeline once with the current settings; prints the campaign + the 5-check validator report + the quality scan, and saves campaign/report/provenance/quality_report under `data/shell/<campaign_id>/`. |
 | `/validate [campaign.json]` | Run the 5 coherence checks on a campaign file (defaults to the last generated one). |
+| `/quality [campaign.json]` | Run the post-run quality scan (9 checks + label audit + strip stats) on a campaign file or the last run. |
 | `/measure [--runs=N]` | Run the 10-spec reliability suite and print the failure-rate table (writes `summary.md`). |
 | `/reproduce [all]` | Run the same spec twice and compare (default: spec S1, seed 42). |
 | `/send` | Deliver the last generated campaign to the MailHog sink (`docker compose up -d`). |
@@ -263,15 +270,30 @@ Every file's job, grouped by directory.
 | `validator_agent/links.py` | URL/token extraction used by the `link_consistency` check. |
 | `validator_agent/__init__.py` | Package marker exposing `validate_campaign`. |
 
+### `quality_agent/` — the post-run quality lifecycle (COVA-X methodology)
+
+Deterministic, no LLM, runs on **every** generated campaign; findings are
+evidence, never repairs.
+
+| File | What it is / why it matters |
+|------|------------------------------|
+| `quality_agent/scan.py` | `scan_campaign`: the full lifecycle — 9 checks, strip stats, label audit → `QualityReport`. |
+| `quality_agent/artifacts.py` | Five generation-artifact scanners: dialogue collapse, stage direction, turn overflow, meta bleed, loop detection. |
+| `quality_agent/contamination.py` | Four contamination scanners: pretext lexicon bleed, roster-name drift, wrong-brand mentions, non-Latin script. |
+| `quality_agent/strip.py` | `strip_stage_directions` — measured on a copy, never applied to the artifact. |
+| `quality_agent/labels.py` | Automated label audit: heuristic-implied pretext/tone/difficulty vs. the spec labels (`ok` / `mismatch` / `unverifiable`). |
+| `quality_agent/lexicon.py` | The shared deterministic lexicons and pattern sets behind the scanners. |
+
 ### `measurement/` — the reproducibility & reliability harness
 
 | File | What it is / why it matters |
 |------|------------------------------|
 | `measurement/specs.py` | The 10-spec baseline (`CampaignSpec`): recipients, pretexts, tones, seeds. |
 | `measurement/adapters.py` | `AdkPipelineAdapter` (real, drives ADK) and `StubAdapter` (offline CI path). |
-| `measurement/runner.py` | Runs one spec, catches every failure as a `generation_error` record, computes canonical hashes. |
+| `measurement/runner.py` | Runs one spec, catches every failure as a `generation_error` record, computes canonical hashes, and records the post-run quality scan variables. |
 | `measurement/reproduce.py` | CLI: same spec × N runs → `reproducibility.json` (content + deterministic-layer hashes). |
-| `measurement/reliability.py` | CLI: all specs → `reliability.json` + `summary.md` with the violation/failure-rate tables. |
+| `measurement/reliability.py` | CLI: all specs → `reliability.json` + `summary.md` with the violation/failure-rate tables and the quality-flag aggregates. |
+| `measurement/quality.py` | CLI: all specs → `quality.json` + `quality-summary.md` (flag rates per check and per pretext, contamination, label audit, stripping stats). |
 | `measurement/__init__.py` | Package marker. |
 
 ### `org/` — synthetic people (the simulation context)

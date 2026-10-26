@@ -4,6 +4,63 @@
 > (el resto del repo sigue la convención en inglés). Entradas en orden
 > cronológico; los hallazgos se registran con fecha, evidencia y estado.
 
+## 2026-10-26 — Pipeline de quality checks post-run (metodología COVA-X)
+
+Implementación del quality lifecycle del paper de expansión de dataset
+(`dataset-expantion-quality-check.pdf`), adaptado al dominio email+SMS:
+
+- **Escaneo de artefactos de generación** (`quality_agent/artifacts.py`,
+  análogo a `scan_generation_quality.py`): `dialogue_collapse`,
+  `stage_direction`, `turn_overflow`, `meta_bleed`, `loop_detection`.
+- **Escaneo de contaminación** (`quality_agent/contamination.py`, §IV-C):
+  bleed de léxico entre pretextos (umbral: ≥ 2 términos distintos de otro
+  pretexto — un solo término compartido es ruido, ver hallazgo abajo),
+  drift de nombres del roster + artefactos de nombre concatenado
+  ("RebeccaBruno"), mención de marca equivocada, y script no-latino.
+- **Stripping de stage directions** (`quality_agent/strip.py`, §IV-D):
+  medido sobre copia, nunca aplicado — el artefacto entregado queda intacto y
+  las stats (`affected_messages`, `stripped_chars`) son el número análogo a la
+  tasa de turnos afectados del paper.
+- **Auditoría automática de etiquetas** (`quality_agent/labels.py`, §IV-E):
+  labeler determinístico por léxicos (pretext, tone, difficulty); status por
+  etiqueta `ok | mismatch | unverifiable`. `mismatch` = análogo a la
+  corrección de labels del paper (49.8% → 3.9%); `unverifiable` = hallazgos
+  diferidos.
+- **Integración en cada run:** `measurement/runner.py` graba las variables de
+  calidad en cada `RunRecord` (junto a las existentes: `failing_checks`,
+  `raw_link_violations`, `first_attempt_raw_link_violations`, `n_attempts`,
+  `refined`); `reliability.py` agrega tasas de flags/contaminación/corrección
+  y el `summary.md` las reporta; suite dedicada
+  `python -m measurement.quality` escribe `quality.json` +
+  `quality-summary.md` con el desglose por pretexto (análogo a la Tabla II).
+  El shell (`/generate`, `/replay`) guarda `quality_report.json` en cada run y
+  suma el comando `/quality`.
+- **Contrato nuevo:** `QualityReport`/`QualityCheckResult`/`QualityFinding`/
+  `LabelAudit`/`StripStats` en `app/core/schemas.py` + persistencia
+  `quality-reports`; documentado como contrato #8 en `docs/flow-schema.md`.
+- **Cadena de evidencia de tres puntos (mapeo §IV-B):** en este repo la
+  cadena equivalente ya existía para links (raw primer intento → raw
+  post-refinamiento → post-ensamblador); el quality scan agrega la cuarta capa
+  de contenido (artefactos + contaminación + labels) sobre el artefacto
+  entregado.
+
+Hallazgos del proceso:
+
+- El fixture de links conocido (`known-case/generated_campaign.json`) es un
+  executive_request sobre pago de vendor: "payment" aparece 3× pero es
+  contenido legítimo de ese pretexto. El umbral de contaminación se ajustó a
+  ≥ 2 términos *distintos* de otro pretexto (un solo término no dispara).
+- El caso `ceo_self_impersonation` no lo detecta el quality scan — lo detecta
+  el check `sender_recipient` del validador. División de responsabilidades
+  correcta: coherencia estructural ≠ calidad de contenido.
+- El labeler reporta `unverifiable` (empate/ausencia de señal) en vez de
+  forzar un mismatch — decisión deliberada, análoga a los hallazgos diferidos
+  del paper.
+
+Commits: `feat(quality): post-run quality lifecycle scan (COVA-X methodology)…`
+
+---
+
 ## 2026-10-08 — Revisión de diseño: tres resultados que no median lo que parecían
 
 Revisión del mentor sobre los resultados centrales. Resumen y resolución:

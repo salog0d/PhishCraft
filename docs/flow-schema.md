@@ -38,6 +38,7 @@ verifies coherence, and does **not** track victim interaction or campaign KPIs.
 | 5 | `GeneratedCampaign` | assembler | store / Validator | 1–2 |
 | 6 | `CoherenceReport` | Validator | store / harness | 2 |
 | 7 | `ProvenanceLog` | Validator | store | 2 |
+| 8 | `QualityReport` | quality scanner | store / harness | 2 (post-run) |
 
 ---
 
@@ -332,6 +333,71 @@ generated message.
 
 ---
 
+## 8 · QualityReport — Phase 2, post-run (quality scanner → store / harness)
+
+The recorded outcome of the post-run quality scan — the COVA-X-style dataset
+quality lifecycle applied to one campaign. Run on **every** generation by the
+harness (`measurement/runner.py`) and the shell (`ptshell`); the standalone
+suite is `python -m measurement.quality`.
+
+```json
+{
+  "contract": "QualityReport",
+  "campaign_id": "q3-awareness-2026",
+  "spec_id": "S1",
+  "pretext": "executive_request",
+  "results": [
+    { "check": "stage_direction", "passed": false, "count": 1,
+      "findings": [
+        { "check": "stage_direction", "field": "email_subject",
+          "excerpt": "Action needed [EMAIL_SUBJECT] …",
+          "detail": "stage-direction artifact '[EMAIL_SUBJECT]' in prose" }
+      ] },
+    { "check": "dialogue_collapse", "passed": true, "count": 0, "findings": [] }
+  ],
+  "label_audit": {
+    "available": true,
+    "spec_labels": { "pretext": "executive_request", "tone": "urgent",
+                     "difficulty": "medium" },
+    "predicted_labels": { "pretext": "invoice_payment", "tone": "neutral",
+                          "difficulty": "hard" },
+    "statuses": { "pretext": "mismatch", "tone": "mismatch",
+                  "difficulty": "mismatch" },
+    "mismatches": ["pretext", "tone", "difficulty"]
+  },
+  "strip_stats": { "affected_messages": 1, "stripped_chars": 16,
+                   "per_message": { "msg-0001": 16 } },
+  "n_flags": 1,
+  "any_flag": true
+}
+```
+
+| Check category | What it detects |
+|----------------|-----------------|
+| `dialogue_collapse` | Prose signed by, or addressed to, an identity that is neither the persona nor the recipient. |
+| `stage_direction` | Bracket/parenthetical directions and leftover `{{cta-link}}` / `[EMAIL_SUBJECT]`-style placeholders. |
+| `turn_overflow` | Per-channel length anomalies (overlong or underdeveloped prose). |
+| `meta_bleed` | Model instruction echo: refusal phrasing, "here is the message", prompt vocabulary. |
+| `loop_detection` | Repeated lines, subject restated in the body, SMS ≈ email duplication. |
+| `pretext_contamination` | Another pretext's lexicon bleeding into the prose (≥ 2 distinct terms). |
+| `name_contamination` | Other roster names or concatenated-name artifacts ("RebeccaBruno"). |
+| `brand_contamination` | A known brand mentioned by a campaign that does not impersonate it. |
+| `script_contamination` | Non-Latin script characters in prose. |
+
+Rules:
+
+- The scanner is deterministic Python and **never raises** on bad content —
+  findings are data, not exceptions.
+- The scanner **never mutates the campaign**. Stage-direction stripping is
+  measured on a copy (`strip_stats`); the delivered artifact is untouched.
+- `results` must not repeat a check category, `n_flags` must equal the total
+  finding count, and `any_flag` must match `n_flags`.
+- The label audit's per-label status is `ok`, `mismatch`, or `unverifiable`
+  (no heuristic signal — deferred, like the paper's deferred audit findings).
+  `mismatch` is the label-correction analogue.
+
+---
+
 ## Validation & Persistence Rules
 
 Enforced by Pydantic v2 models in
@@ -354,6 +420,9 @@ Enforced by Pydantic v2 models in
 - **Coherence.** The validator enforces persona identity, cross-channel
   reference existence, timing, link consistency, and sender-recipient
   separation; `CoherenceReport` must be internally consistent.
+- **Quality evidence.** The quality scanner records, never repairs: artifact
+  findings, contamination, and label-audit mismatches are data; stripping is
+  measured on a copy.
 - **Referential integrity.** Prefixed ids (`msg-`, `bat-`) are unique within a
   collection.
 
@@ -370,6 +439,7 @@ All artifacts are **append-only (immutable)** and **encrypted at rest**.
 | `GeneratedCampaign` | `generated-campaigns` | 365 | synthetic |
 | `CoherenceReport` | `coherence-reports` | 365 | none |
 | `ProvenanceLog` | `provenance-log` | 730 | none |
+| `QualityReport` | `quality-reports` | 365 | none |
 
 ---
 
@@ -385,7 +455,11 @@ CampaignSpec + PersonaCatalog┘        │ raw_bindings
                               validator_agent (deterministic)
                                       │ CoherenceReport + ProvenanceLog
                                       ▼
-                              measurement harness (reproducibility + reliability)
+                              quality scanner (deterministic, post-run)
+                                      │ QualityReport
+                                      ▼
+                              measurement harness (reproducibility +
+                              reliability + quality) · ptshell
 ```
 
 See [architecture.md](./architecture.md) for the stage roles and phase

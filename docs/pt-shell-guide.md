@@ -91,11 +91,12 @@ pt> /generate            # call the model, build + validate the campaign
 | `/config <key>` | Show one setting. |
 | `/config reset` | Restore every setting to its default. |
 | `/model <id>` | Switch model. Applies to the **next** `/generate`. |
-| `/models` | List known model ids. |
+| `/models` | List known model ids (cloud providers + local Ollama models). |
 | `/recipients` | Table of the target catalog (12 internal + supplier/bank/carrier). |
 | `/recipient <id>` | Set the default simulation target. The impersonated persona is derived automatically from the pretext + target (e.g. `executive_request` → the target's manager). |
-| `/generate` | One ADK pipeline run: generate → assemble → validate. |
+| `/generate` | One ADK pipeline run: generate → assemble → validate → quality scan. |
 | `/validate [file.json]` | Run the 5 coherence checks on a campaign file (defaults to the last generated campaign). |
+| `/quality [file.json]` | Show the last campaign's quality check (9 checks + label audit + strip stats + evidence excerpts). Resolves the campaign from an explicit path, the in-session last run, or the run manifest — works right after restarting the shell. |
 | `/measure [--runs=N]` | Run the 10-spec reliability suite; prints the failure-rate summary. |
 | `/reproduce [all]` | Run the same spec twice and compare (default: spec S1, seed 42). |
 | `/replay` | Re-run the last execution recorded in the run manifest (same spec, adapter, and model as the recorded run) and show it again. |
@@ -145,7 +146,7 @@ Unknown keys and invalid values are rejected with the valid options listed.
 | `followup_minutes` | `75` | SMS is scheduled this many minutes after the email |
 | `adapter` | `adk` | `adk` (real ADK pipeline, needs a key) or `stub` (offline, §7) |
 | `mission` | `config/q3-awareness-2026.mission.json` | mission file (authorization gate, model policy) |
-| `output_dir` | `data/shell` | where `/generate` and `/replay` save `generated_campaign.json`, `coherence_report.json`, and `provenance.json` per campaign, plus the `runs.json` run manifest (§8) |
+| `output_dir` | `data/shell` | where `/generate` and `/replay` save `generated_campaign.json`, `coherence_report.json`, `provenance.json`, and `quality_report.json` per campaign, plus the `runs.json` run manifest (§8) |
 
 ## 6. Models & API keys
 
@@ -158,6 +159,18 @@ Unknown keys and invalid values are rejected with the valid options listed.
 | `gemini-2.5-flash` | `GOOGLE_API_KEY` | Gemini via ADK |
 | `anthropic/claude-opus-5` | `ANTHROPIC_API_KEY` | via LiteLlm |
 | `openai/gpt-4.1` | `OPENAI_API_KEY` | via LiteLlm |
+| `ollama/<name>` | none — local | any model pulled into the local Ollama instance, e.g. `ollama/qwen3:8b` |
+
+**Local Ollama models are discovered live.** `/models` and the `/model`
+Tab-completion list every model in `ollama list`, prefixed `ollama/` (the
+LiteLlm id). A bare name also works — `/model qwen3:8b` sets
+`ollama/qwen3:8b`. Pull a model first:
+
+```bash
+ollama pull qwen3:8b     # ~5.4 GB; see the README for a model shortlist
+python -m ptshell
+pt> /model qwen3:8b      # tab-completes; runs fully offline on the GPU
+```
 
 Switching models mid-session is fine — the change applies to the next
 `/generate` (the pipeline re-resolves the model automatically).
@@ -177,17 +190,23 @@ config to `adk` afterwards.
 
 ## 8. Run manifest & provenance logging
 
-Every execution — `/generate` **and** `/replay` — writes two things into
-`data/shell/` (the `output_dir`):
+Every execution — `/generate` **and** `/replay` — writes the run artifacts
+into `data/shell/` (the `output_dir`):
 
 - **`runs.json` — the run manifest** (append-only). One entry per execution:
   `run_id`, `kind` (`generate` | `replay`), `parent_run_id` (which run a
   replay re-ran), timestamp, adapter, model, the full spec, the written file
   paths, the refinement metadata (`n_attempts`, `refined`,
-  `first_attempt_raw_link_violations`), and the validator verdict.
+  `first_attempt_raw_link_violations`), the validator verdict, and the
+  quality-scan summary (flag counts, contamination, label mismatches, strip
+  stats).
 - **`<campaign_id>/provenance.json` — the provenance log.** The campaign's
   persona plus every message's `GenerationProvenance` (model, params, seed,
   prompt template id, prompt hash, runtime) and its `link_fixes`.
+- **`<campaign_id>/quality_report.json` — the post-run quality scan.** The
+  full `QualityReport`: findings per check category (5 generation-artifact
+  checks + 4 contamination checks), the automated label audit, and the
+  stage-direction stripping statistics.
 
 ```bash
 pt> /generate
