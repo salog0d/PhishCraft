@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -51,6 +52,45 @@ KNOWN_MODELS = [
     "anthropic/claude-opus-5",   # LiteLlm, needs ANTHROPIC_API_KEY
     "openai/gpt-4.1",            # LiteLlm, needs OPENAI_API_KEY
 ]
+
+# Local Ollama discovery: cached briefly because the tab-completer calls it
+# on every keystroke; a new `ollama pull` shows up after the TTL expires.
+_ollama_cache: list[str] = []
+_ollama_checked_at: float = 0.0
+_OLLAMA_TTL = 10.0
+
+
+def ollama_models() -> list[str]:
+    """Bare model names served by the local Ollama daemon (``ollama list``).
+
+    Fails soft — no ``ollama`` binary or an unreachable daemon yields an empty
+    list, so the shell keeps working offline. The LiteLlm model id for a name
+    returned here is ``ollama/<name>``.
+    """
+    now = time.time()
+    global _ollama_cache, _ollama_checked_at
+    if now - _ollama_checked_at < _OLLAMA_TTL:
+        return _ollama_cache
+    models: list[str] = []
+    try:
+        out = subprocess.run(
+            ["ollama", "list"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        ).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError,
+            subprocess.TimeoutExpired):
+        pass
+    else:
+        for line in out.splitlines()[1:]:  # skip the header row
+            fields = line.split()
+            if fields:
+                models.append(fields[0])
+    _ollama_checked_at = now
+    _ollama_cache = models
+    return models
 
 
 def config_path() -> Path:

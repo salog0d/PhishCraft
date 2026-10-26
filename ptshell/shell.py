@@ -311,6 +311,9 @@ class PtShell:
             self.console.print(f"model = [bold]{self.cfg['model']}[/bold]")
             return
         model = tokens[0]
+        if model in cfg_mod.ollama_models():
+            # A bare Ollama name (e.g. 'qwen3:8b') selects the local instance.
+            model = f"ollama/{model}"
         self.cfg["model"] = model
         self._save_cfg()
         self._active_model = None
@@ -327,7 +330,17 @@ class PtShell:
         for m in KNOWN_MODELS:
             note = "current" if m == self.cfg["model"] else "needs its provider API key"
             table.add_row(m, note)
+        for name in cfg_mod.ollama_models():
+            model_id = f"ollama/{name}"
+            note = "current" if model_id == self.cfg["model"] else "local Ollama"
+            table.add_row(model_id, note)
         self.console.print(table)
+        if cfg_mod.ollama_models():
+            self._dim("local models discovered from `ollama list` — pull more "
+                      "with `ollama pull <model>` and they appear here")
+        else:
+            self._dim("no local Ollama models — `ollama list` found none "
+                      "(or Ollama isn't installed/running)")
 
     def cmd_recipients(self, arg: str) -> None:
         from generator_agent.catalog import load_catalog
@@ -769,7 +782,10 @@ class PtShell:
                                 display_meta=p["display_name"],
                             )
                 elif command == "model":
-                    for m in KNOWN_MODELS:
+                    completions = list(KNOWN_MODELS) + [
+                        f"ollama/{name}" for name in cfg_mod.ollama_models()
+                    ]
+                    for m in completions:
                         if m.startswith(arg):
                             yield Completion(m, start_position=-len(arg))
 

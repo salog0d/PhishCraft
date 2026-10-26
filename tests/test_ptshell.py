@@ -143,6 +143,33 @@ def test_model_and_models(shell):
     assert shell.cfg["model"] == "deepseek/deepseek-reasoner"
 
 
+def test_models_lists_local_ollama_models(shell, monkeypatch):
+    monkeypatch.setattr(cfg_mod, "ollama_models", lambda: ["qwen3:8b", "phi4-mini"])
+    out = _run(shell, "/models")
+    assert "ollama/qwen3:8b" in out
+    assert "ollama/phi4-mini" in out
+    assert "local Ollama" in out
+
+
+def test_model_accepts_a_bare_ollama_name(shell, monkeypatch):
+    monkeypatch.setattr(cfg_mod, "ollama_models", lambda: ["qwen3:8b"])
+    _run(shell, "/model qwen3:8b")
+    assert shell.cfg["model"] == "ollama/qwen3:8b"
+
+
+def test_model_keeps_an_unprefixed_provider_id(shell, monkeypatch):
+    monkeypatch.setattr(cfg_mod, "ollama_models", lambda: [])
+    _run(shell, "/model gemini-2.5-flash")
+    assert shell.cfg["model"] == "gemini-2.5-flash"
+
+
+def test_ollama_models_fails_soft_without_the_binary(monkeypatch):
+    cfg_mod._ollama_checked_at = 0.0  # bypass the 10 s discovery cache
+    cfg_mod._ollama_cache = []
+    monkeypatch.setenv("PATH", "")  # no `ollama` binary reachable
+    assert cfg_mod.ollama_models() == []
+
+
 def test_recipients_lists_catalog(shell):
     out = _run(shell, "/recipients")
     assert "ext-supplier-01" in out
