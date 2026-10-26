@@ -63,8 +63,9 @@ COMMANDS: dict[str, str] = {
     "models": "list known model ids",
     "recipients": "list the target catalog (12 internal + 3 external personas)",
     "recipient": "set the default recipient (/recipient <id>)",
-    "generate": "run the ADK pipeline once; save campaign + report",
+    "generate": "run the ADK pipeline once; save campaign + report + quality scan",
     "validate": "run the 5 coherence checks on a campaign file",
+    "quality": "show the last campaign's quality check (or /quality <campaign.json>)",
     "measure": "run the 10-spec reliability suite (writes summary.md)",
     "reproduce": "run the same spec twice and compare (default: S1)",
     "replay": "re-run the last execution (from the run manifest) and show it again",
@@ -94,6 +95,7 @@ class PtShell:
         self._active_model: str | None = None
         self.last_campaign = None
         self.last_report = None
+        self.last_quality = None
         self.last_paths: dict[str, Path] = {}
         self.last_recipient: dict | None = None
         self.last_run: dict | None = None  # manifest entry of the last execution
@@ -404,7 +406,8 @@ class PtShell:
         self, kind: str, adapter: str, spec: dict, mission: dict, campaign,
         report, run_info: dict | None = None, parent_run_id: str | None = None,
     ) -> dict:
-        """Persist the execution: artifacts, provenance log, manifest entry."""
+        """Persist the execution: artifacts, provenance log, quality report,
+        and the manifest entry."""
         from ptshell import runlog
 
         out = Path(self.cfg["output_dir"]) / mission["campaign_id"]
@@ -414,6 +417,16 @@ class PtShell:
         campaign_path.write_text(campaign.model_dump_json(indent=2), encoding="utf-8")
         report_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
         provenance_path = runlog.write_provenance(campaign, out)
+
+        # Post-run quality scan (the paper's lifecycle) — recorded on every
+        # run, next to the coherence report, and summarized in the manifest.
+        from quality_agent.scan import scan_campaign
+
+        quality = scan_campaign(campaign, spec=spec, mission=mission)
+        quality_path = out / "quality_report.json"
+        quality_path.write_text(
+            quality.model_dump_json(indent=2), encoding="utf-8"
+        )
 
         run_id = runlog.next_run_id(self.cfg["output_dir"])
         entry = runlog.build_entry(
@@ -427,18 +440,22 @@ class PtShell:
                 "campaign": campaign_path,
                 "report": report_path,
                 "provenance": provenance_path,
+                "quality_report": quality_path,
             },
             run_info=run_info,
             report=report,
+            quality=quality,
         )
         runlog.append_manifest(self.cfg["output_dir"], entry)
 
         self.last_campaign = campaign
         self.last_report = report
+        self.last_quality = quality
         self.last_paths = {
             "campaign": campaign_path,
             "report": report_path,
             "provenance": provenance_path,
+            "quality_report": quality_path,
         }
         self.last_run = entry
         return entry
@@ -471,6 +488,37 @@ class PtShell:
         self._dim(f"saved: {self.last_paths['campaign']}")
         self._dim(f"saved: {self.last_paths['report']}")
         self._dim(f"saved: {self.last_paths['provenance']}")
+        self._dim(f"saved: {self.last_paths['quality_report']}")
+        self._render_quality_summary(self.last_quality)
+
+    def _render_quality_summary(self, quality) -> None:
+        """A one-panel quality scan summary (the paper's lifecycle numbers)."""
+        if quality is None:
+            return
+        headline = Text()
+        if quality.any_flag:
+            headline.append(
+                f"{quality.n_flags} quality finding(s) recorded:\n",
+                style="bold red",
+            )
+        else:
+            headline.append("quality scan clean — no findings\n", style="bold green")
+        for r in quality.results:
+            if not r.passed:
+                headline.append(f"  • {r.check}: {r.count}\n", style="yellow")
+        if quality.label_audit.available and quality.label_audit.mismatches:
+            headline.append(
+                f"  • label mismatches: "
+                f"{', '.join(quality.label_audit.mismatches)}\n",
+                style="yellow",
+            )
+        if quality.strip_stats.affected_messages:
+            headline.append(
+                f"  • strip pass would touch "
+                f"{quality.strip_stats.affected_messages} message(s)\n",
+                style="yellow",
+            )
+        self._panel(headline, "quality scan")
 
     def cmd_validate(self, arg: str) -> None:
         from app.core.schemas import GeneratedCampaign
@@ -493,6 +541,121 @@ class PtShell:
             return
         report = validate_campaign(campaign)
         self._render_campaign(campaign, report)
+
+    def cmd_quality(self, arg: str) -> None:
+        """Show the last campaign's quality check (or a campaign file's).
+
+        Resolution order for the campaign: an explicit path argument, then
+        the in-session last campaign, then the last manifest entry — so the
+        command also works right after restarting the shell.
+        """
+        from app.core.schemas import GeneratedCampaign
+        from quality_agent.scan import scan_campaign
+
+        tokens = shlex.split(arg)
+        if tokens:
+            path = Path(tokens[0])
+        else:
+            path = self.last_paths.get("campaign") or \
+                self._last_campaign_path_from_manifest()
+        if path is None or not path.exists():
+            self._err("no campaign to scan — run /generate or pass a "
+                      "campaign file")
+            return
+        try:
+            campaign = GeneratedCampaign.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+        except Exception as exc:
+            self._err(f"not a valid GeneratedCampaign: {type(exc).__name__}: {exc}")
+            return
+
+        # Ground-truth labels come from the spec that produced the campaign:
+        # the in-session run entry, or the manifest entry whose campaign file
+        # matches the scanned path.
+        spec = None
+        entry = self.last_run
+        if entry is None or entry.get("files", {}).get("campaign") != str(path):
+            from ptshell import runlog
+
+            for recorded in reversed(runlog.load_manifest(self.cfg["output_dir"])):
+                if recorded.get("files", {}).get("campaign") == str(path):
+                    entry = recorded
+                    break
+        if entry:
+            spec = entry.get("spec")
+
+        quality = scan_campaign(campaign, spec=spec)
+        self._dim(f"scanned: {path}")
+        self._render_quality_summary(quality)
+
+        table = Table(title="quality scan — findings by check",
+                      box=box.SIMPLE_HEAVY, expand=False)
+        table.add_column("check", style="bold")
+        table.add_column("findings")
+        table.add_column("first evidence")
+        for r in quality.results:
+            style = "red" if r.count else "green"
+            table.add_row(
+                r.check,
+                Text(str(r.count), style=style),
+                r.findings[0].detail if r.findings else "—",
+            )
+        self.console.print(table)
+
+        # Full evidence table: every finding, capped for the terminal.
+        findings = [f for r in quality.results for f in r.findings]
+        if findings:
+            table = Table(title="findings (evidence)",
+                          box=box.SIMPLE_HEAVY, expand=False)
+            table.add_column("check", style="bold")
+            table.add_column("field")
+            table.add_column("detail")
+            table.add_column("excerpt")
+            for finding in findings[:12]:
+                table.add_row(
+                    finding.check, finding.field, finding.detail,
+                    finding.excerpt or "—",
+                )
+            if len(findings) > 12:
+                self._dim(f"… {len(findings) - 12} more finding(s) in "
+                          f"{path.parent / 'quality_report.json'}")
+            self.console.print(table)
+
+        if quality.label_audit.available:
+            table = Table(title="automated label audit",
+                          box=box.SIMPLE_HEAVY, expand=False)
+            table.add_column("label", style="bold")
+            table.add_column("spec")
+            table.add_column("predicted")
+            table.add_column("status")
+            for label, spec_value in quality.label_audit.spec_labels.items():
+                predicted = quality.label_audit.predicted_labels.get(label, "—")
+                status = quality.label_audit.statuses.get(label, "—")
+                style = "green" if status == "ok" else \
+                    ("yellow" if status == "unverifiable" else "red")
+                table.add_row(label, spec_value, predicted,
+                              Text(status, style=style))
+            self.console.print(table)
+        if quality.strip_stats.affected_messages:
+            self._panel(
+                Text(
+                    f"{quality.strip_stats.affected_messages} message(s) carry "
+                    f"stage-direction content; a strip pass (on a copy) would "
+                    f"remove {quality.strip_stats.stripped_chars} chars."
+                ),
+                "stage-direction stripping",
+            )
+
+    def _last_campaign_path_from_manifest(self) -> Path | None:
+        """The most recent campaign file recorded in the run manifest."""
+        from ptshell import runlog
+
+        for entry in reversed(runlog.load_manifest(self.cfg["output_dir"])):
+            campaign = entry.get("files", {}).get("campaign")
+            if campaign and Path(campaign).exists():
+                return Path(campaign)
+        return None
 
     def cmd_measure(self, arg: str) -> None:
         from measurement.reliability import run as run_reliability

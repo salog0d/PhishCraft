@@ -5,11 +5,16 @@ harness's output directory (``<output_dir>``, default ``data/shell``):
 
 - ``<output_dir>/runs.json`` — the **run manifest**: an append-only list, one
   entry per execution, recording what ran (adapter, model, spec, files,
-  refinement metadata, validator verdict) and which run a replay re-ran.
+  refinement metadata, validator verdict, quality scan summary) and which run
+  a replay re-ran.
 - ``<output_dir>/<campaign_id>/provenance.json`` — the **provenance log**:
   the campaign-level identity plus every message's ``GenerationProvenance``
   (model, params, prompt template id, prompt hash, runtime) and its
   ``link_fixes``.
+
+Every run also gets the post-run quality scan (``quality_agent.scan``); the
+full ``QualityReport`` is saved next to the campaign as
+``quality_report.json`` and its summary lands in the manifest entry.
 
 ``/replay`` reads the manifest's last entry to re-run the last execution;
 ``/replay-logs`` renders the manifest entry and provenance log in the
@@ -77,6 +82,7 @@ def build_entry(
     files: dict,
     run_info: dict | None,
     report=None,
+    quality=None,
 ) -> dict:
     """One manifest entry: everything needed to replay or audit the run."""
     return {
@@ -96,6 +102,18 @@ def build_entry(
                 "failing": [r.check.value for r in report.results if not r.passed],
             }
             if report is not None
+            else None
+        ),
+        "quality": (
+            {
+                "n_flags": quality.n_flags,
+                "any_flag": quality.any_flag,
+                "failing": [r.check for r in quality.results if not r.passed],
+                "label_mismatches": list(quality.label_audit.mismatches),
+                "strip_affected_messages": quality.strip_stats.affected_messages,
+                "strip_stripped_chars": quality.strip_stats.stripped_chars,
+            }
+            if quality is not None
             else None
         ),
         "status": "ok",
