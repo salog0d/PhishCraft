@@ -1,1 +1,1 @@
-"""Measurement harness: reproducibility and reliability experiments."""
+"""Measurement harness: reproducibility, reliability, and quality suites."""

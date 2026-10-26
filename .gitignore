@@ -17,4 +17,5 @@ __pycache__/
 data/shell/
 data/measurements/reliability-*/
 data/measurements/reproduce-*/
+data/measurements/quality-*/
 data/measurements/_*

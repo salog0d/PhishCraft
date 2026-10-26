@@ -25,6 +25,11 @@ layers of the pipeline:
 The stub adapter never refines (no LLM), so its first-attempt and
 post-refinement numbers coincide.
 
+Every successful run additionally gets the post-run **quality scan**
+(``quality_agent.scan`` — the COVA-X-style lifecycle): the summary reports
+quality-flag rates per check category, contamination rates, the automated
+label audit's correction rate, and stage-direction stripping statistics.
+
 The interactive shell calls ``run()`` directly.
 """
 
@@ -40,6 +45,7 @@ from typing import Union
 from measurement.adapters import get_adapter
 from measurement.runner import run_spec
 from measurement.specs import baseline_specs
+from quality_agent.scan import CHECK_NAMES as QUALITY_CHECKS
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -49,6 +55,10 @@ CHECKS = [
     "cross_channel_reference",
     "link_consistency",
     "sender_recipient",
+]
+
+CONTAMINATION_CHECKS = [
+    c for c in QUALITY_CHECKS if "contamination" in c
 ]
 
 
@@ -100,6 +110,34 @@ def run(
     )
     attempts = [r.n_attempts for r in ok if r.n_attempts is not None]
 
+    # Post-run quality scan aggregates (the paper's lifecycle numbers):
+    # findings per check category, contamination per category, the automated
+    # label audit's correction rate, and the stripping pass statistics.
+    n_quality_flags = sum(1 for r in ok if r.quality_flags > 0)
+    quality_flag_counts = Counter(
+        check for r in ok for check in r.quality_failing
+    )
+    quality_finding_counts: dict[str, int] = {}
+    for check in QUALITY_CHECKS:
+        total = 0
+        for r in ok:
+            for res in (r.quality_report or {}).get("results", []):
+                if res["check"] == check:
+                    total += res["count"]
+        quality_finding_counts[check] = total
+    n_contaminated = sum(1 for r in ok if r.contamination)
+    contamination_counts = Counter(
+        check for r in ok for check in r.contamination
+    )
+    n_label_mismatch = sum(1 for r in ok if r.label_mismatches)
+    label_mismatch_counts = Counter(
+        label for r in ok for label in r.label_mismatches
+    )
+    n_strip_affected = sum(
+        1 for r in ok if r.strip_affected_messages > 0
+    )
+    strip_chars = sum(r.strip_stripped_chars for r in ok)
+
     payload = {
         "adapter": adapter.name,
         "model": specs[0].model["name"],
@@ -136,6 +174,35 @@ def run(
         ),
         "attempts_distribution": dict(Counter(attempts)),
         "violation_counts": {c: violation_counts.get(c, 0) for c in CHECKS},
+        # Post-run quality scan (the paper's lifecycle, on every run).
+        "n_campaigns_with_quality_flags": n_quality_flags,
+        "quality_flag_rate": (round(n_quality_flags / len(ok), 4) if ok else None),
+        "quality_flag_counts": {
+            c: quality_flag_counts.get(c, 0) for c in QUALITY_CHECKS
+        },
+        "quality_finding_counts": {
+            c: quality_finding_counts.get(c, 0) for c in QUALITY_CHECKS
+        },
+        "n_campaigns_with_contamination": n_contaminated,
+        "contamination_rate": (
+            round(n_contaminated / len(ok), 4) if ok else None
+        ),
+        "contamination_counts": {
+            c: contamination_counts.get(c, 0) for c in CONTAMINATION_CHECKS
+        },
+        "n_campaigns_with_label_mismatch": n_label_mismatch,
+        "label_correction_rate": (
+            round(n_label_mismatch / len(ok), 4) if ok else None
+        ),
+        "label_mismatch_counts": {
+            label: label_mismatch_counts.get(label, 0)
+            for label in ("pretext", "tone", "difficulty")
+        },
+        "n_campaigns_with_strip_affected": n_strip_affected,
+        "strip_affected_rate": (
+            round(n_strip_affected / len(ok), 4) if ok else None
+        ),
+        "total_stripped_chars": strip_chars,
         "per_spec": [
             {
                 "spec_id": r.spec_id,
@@ -152,6 +219,12 @@ def run(
                 "refined": r.refined,
                 "error": r.error,
                 "duration_ms": r.duration_ms,
+                "quality_flags": r.quality_flags,
+                "quality_failing": r.quality_failing,
+                "contamination": r.contamination,
+                "label_mismatches": r.label_mismatches,
+                "strip_affected_messages": r.strip_affected_messages,
+                "strip_stripped_chars": r.strip_stripped_chars,
             }
             for r in records
         ],
@@ -204,11 +277,39 @@ def run(
         lines.append(f"| `{check}` | {payload['violation_counts'][check]} |")
     lines += [
         "",
+        "## Post-run quality scan (the paper's lifecycle, on every run)",
+        "",
+        f"- campaigns with ≥ 1 quality flag: "
+        f"{payload['n_campaigns_with_quality_flags']}/{len(ok)} "
+        f"(rate {payload['quality_flag_rate']})",
+        f"- campaigns with contamination: "
+        f"{payload['n_campaigns_with_contamination']}/{len(ok)} "
+        f"(rate {payload['contamination_rate']})",
+        f"- campaigns with a label mismatch (automated audit): "
+        f"{payload['n_campaigns_with_label_mismatch']}/{len(ok)} "
+        f"(correction rate {payload['label_correction_rate']}; "
+        f"by label {payload['label_mismatch_counts']})",
+        f"- campaigns with strip-affected messages: "
+        f"{payload['n_campaigns_with_strip_affected']}/{len(ok)} "
+        f"(rate {payload['strip_affected_rate']}); "
+        f"{payload['total_stripped_chars']} chars would be removed",
+        "",
+        "| quality check | findings | campaigns flagged |",
+        "|---|---|---|",
+    ]
+    for check in QUALITY_CHECKS:
+        lines.append(
+            f"| `{check}` | {payload['quality_finding_counts'][check]} | "
+            f"{payload['quality_flag_counts'][check]} |"
+        )
+    lines += [
+        "",
         "## Per-spec results",
         "",
         "| spec | run | seed | status | attempts | refined | first raw | "
-        "final raw | failing checks |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "final raw | failing checks | quality flags | contamination | "
+        "label mismatches |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in records:
         lines.append(
@@ -217,7 +318,10 @@ def run(
             f"{'yes' if r.refined else 'no'} | "
             f"{r.first_attempt_raw_link_violations if r.first_attempt_raw_link_violations is not None else '—'} | "
             f"{r.raw_link_violations} | "
-            f"{', '.join(r.failing_checks) or '—'} |"
+            f"{', '.join(r.failing_checks) or '—'} | "
+            f"{r.quality_flags} | "
+            f"{', '.join(r.contamination) or '—'} | "
+            f"{', '.join(r.label_mismatches) or '—'} |"
         )
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 

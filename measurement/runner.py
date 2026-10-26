@@ -1,4 +1,10 @@
-"""Run one spec, validate, and record — never crash on a bad generation."""
+"""Run one spec, validate, and record — never crash on a bad generation.
+
+Every run also gets the post-run **quality scan** (``quality_agent.scan`` —
+the COVA-X-style lifecycle: generation artifacts, contamination, automated
+label audit, stage-direction stripping stats). Quality findings are recorded
+alongside the coherence results as data, never used to repair the artifact.
+"""
 
 from __future__ import annotations
 
@@ -26,6 +32,14 @@ class RunRecord:
     n_attempts: int | None = None
     refined: bool = False  # at least one refinement round ran
     first_attempt_raw_link_violations: int | None = None  # pre-refinement raw metric
+    # Post-run quality scan (quality_agent.scan — the paper's lifecycle):
+    quality_flags: int = 0                # total findings across all checks
+    quality_failing: list = field(default_factory=list)  # check categories hit
+    contamination: list = field(default_factory=list)    # contamination categories hit
+    label_mismatches: list = field(default_factory=list)  # labels disagreeing with spec
+    strip_affected_messages: int = 0      # messages a strip pass would touch
+    strip_stripped_chars: int = 0         # chars a strip pass would remove
+    quality_report: dict | None = None
 
 
 def canonical_hash(campaign) -> str:
@@ -74,7 +88,7 @@ def run_spec(spec, adapter, run_index: int, mission: dict) -> RunRecord:
             error=f"{type(exc).__name__}: {exc}",
             duration_ms=int((time.perf_counter() - start) * 1000),
         )
-    return RunRecord(
+    record = RunRecord(
         spec_id=spec.spec_id,
         run_index=run_index,
         adapter=adapter.name,
@@ -93,3 +107,25 @@ def run_spec(spec, adapter, run_index: int, mission: dict) -> RunRecord:
             "first_attempt_raw_link_violations"
         ),
     )
+
+    # Post-run quality scan (the paper's lifecycle, on every run). The scan is
+    # deterministic and never raises; if it ever did, the run must still be
+    # recorded — a scanner bug is not a generation failure.
+    try:
+        from quality_agent.scan import scan_campaign
+
+        quality = scan_campaign(campaign, spec=spec.to_dict(), mission=mission)
+    except Exception as exc:  # pragma: no cover — defensive
+        record.error = f"quality_scan_error: {type(exc).__name__}: {exc}"
+        return record
+    record.quality_flags = quality.n_flags
+    record.quality_failing = [r.check for r in quality.results if not r.passed]
+    record.contamination = [
+        r.check for r in quality.results
+        if not r.passed and "contamination" in r.check
+    ]
+    record.label_mismatches = list(quality.label_audit.mismatches)
+    record.strip_affected_messages = quality.strip_stats.affected_messages
+    record.strip_stripped_chars = quality.strip_stats.stripped_chars
+    record.quality_report = quality.model_dump()
+    return record
