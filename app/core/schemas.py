@@ -26,6 +26,10 @@ This module is the single source of truth for the system's data contracts:
 * The **provenance contracts** (``GenerationProvenance`` / ``ProvenanceLog``)
   that record which model, prompt, parameters, and seed produced each artifact,
   making every generation reproducible.
+* The **quality lifecycle contracts** (``QualityReport`` / ``QualityCheckResult``
+  / ``QualityFinding`` / ``LabelAudit`` / ``StripStats``) that record the
+  post-run content-quality scan (generation artifacts, contamination, automated
+  label audit, stage-direction stripping stats) as evidence — never repairs.
 * The remaining **flow contracts** — one model per hand-off between stages
   (documented in ``docs/flow-schema.md``) — each carrying a
   ``PersistencePolicy`` describing how its artifacts may be stored.
@@ -549,6 +553,121 @@ class CoherenceReport(BaseModel):
 
 
 # =========================================================================== #
+# Quality lifecycle contracts (post-run content-quality scan)
+# =========================================================================== #
+#
+# The deterministic quality scanner (``quality_agent/scan.py``) runs on every
+# generated campaign and records content-quality findings as data — the
+# COVA-X style quality lifecycle: five generation-artifact types (dialogue
+# collapse, stage direction, turn overflow, meta bleed, loop detection), four
+# contamination categories (pretext, name, brand, script), an automated label
+# audit, and stage-direction stripping statistics. Like ``CoherenceReport``,
+# these are evidence artifacts, never repair mechanisms: the scanner never
+# mutates the campaign and never raises on bad content.
+
+
+class QualityFinding(BaseModel):
+    """One content-quality finding: what was found, where, and the evidence."""
+
+    check: str = Field(..., max_length=40)
+    field: str = Field(
+        ...,
+        max_length=40,
+        description="The prose field the finding came from: "
+                    "email_subject | email_body | sms_body | campaign.",
+    )
+    excerpt: Optional[str] = Field(
+        default=None,
+        max_length=200,
+        description="A trimmed snippet of the offending text (the evidence).",
+    )
+    detail: str = Field(..., max_length=300)
+
+
+class QualityCheckResult(BaseModel):
+    """The outcome of one quality check category."""
+
+    check: str = Field(..., max_length=40)
+    passed: bool
+    count: int = Field(..., ge=0)
+    findings: list[QualityFinding] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _result_is_consistent(self) -> "QualityCheckResult":
+        if self.count != len(self.findings):
+            raise ValueError("count must equal the number of findings")
+        if self.passed != (self.count == 0):
+            raise ValueError("passed must be false when the check has findings")
+        return self
+
+
+class LabelAudit(BaseModel):
+    """Automated label audit: heuristic-implied labels vs. the spec labels.
+
+    The deterministic labeler (``quality_agent/labels.py``) predicts pretext,
+    tone, and difficulty from the message prose. Each label gets a status:
+    ``ok`` (prediction matches the spec), ``mismatch`` (prediction disagrees —
+    a candidate relabel, the paper's label-correction analogue), or
+    ``unverifiable`` (no heuristic signal either way — deferred, like the
+    paper's deferred audit findings).
+    """
+
+    available: bool = Field(
+        default=False,
+        description="False when no spec was supplied, so no ground truth exists.",
+    )
+    spec_labels: dict[str, str] = Field(default_factory=dict)
+    predicted_labels: dict[str, str] = Field(default_factory=dict)
+    statuses: dict[str, str] = Field(default_factory=dict)
+    mismatches: list[str] = Field(default_factory=list)
+
+
+class StripStats(BaseModel):
+    """Stage-direction stripping statistics (measured on a copy, never applied).
+
+    ``strip_stage_directions`` removes bracket/parenthetical directions and
+    leftover placeholder artifacts from a copy of the prose; the original
+    artifact is never mutated. The stats record how much *would* be removed —
+    the paper's "affected-turn rate" analogue.
+    """
+
+    affected_messages: int = Field(default=0, ge=0)
+    stripped_chars: int = Field(default=0, ge=0)
+    per_message: dict[str, int] = Field(default_factory=dict)
+
+
+class QualityReport(BaseModel):
+    """The recorded outcome of the post-run quality scan of a campaign.
+
+    One ``QualityCheckResult`` per check category (5 generation-artifact
+    checks + 4 contamination checks), plus the label audit and the stripping
+    stats. ``n_flags`` is the total finding count across all checks.
+    """
+
+    PERSISTENCE: ClassVar["PersistencePolicy"]
+
+    campaign_id: CampaignId
+    spec_id: Optional[str] = Field(default=None, max_length=40)
+    pretext: Optional[str] = Field(default=None, max_length=40)
+    results: list[QualityCheckResult] = Field(..., min_length=1)
+    label_audit: LabelAudit = Field(default_factory=LabelAudit)
+    strip_stats: StripStats = Field(default_factory=StripStats)
+    n_flags: int = Field(..., ge=0)
+    any_flag: bool
+
+    @model_validator(mode="after")
+    def _report_is_consistent(self) -> "QualityReport":
+        checks = [r.check for r in self.results]
+        if len(checks) != len(set(checks)):
+            raise ValueError("quality report must not repeat a check category")
+        if self.n_flags != sum(r.count for r in self.results):
+            raise ValueError("n_flags must equal the total finding count")
+        if self.any_flag != (self.n_flags > 0):
+            raise ValueError("any_flag must match n_flags")
+        return self
+
+
+# =========================================================================== #
 # Flow contracts (see docs/flow-schema.md)
 # =========================================================================== #
 
@@ -593,6 +712,9 @@ GeneratedCampaign.PERSISTENCE = PersistencePolicy(
 )
 CoherenceReport.PERSISTENCE = PersistencePolicy(
     store="coherence-reports", retention_days=365, pii=PiiClass.NONE
+)
+QualityReport.PERSISTENCE = PersistencePolicy(
+    store="quality-reports", retention_days=365, pii=PiiClass.NONE
 )
 
 

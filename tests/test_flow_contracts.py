@@ -285,6 +285,7 @@ def test_pretexts_are_tagged_by_scenario_category():
     [
         fc.MissionConfig, fc.DeploymentManifest, fc.GeneratedCampaign,
         fc.CoherenceReport, fc.ProvenanceLog, fc.MessageEnvelope,
+        fc.QualityReport,
     ],
 )
 def test_every_contract_declares_a_persistence_policy(contract):
