@@ -91,6 +91,31 @@ python -m measurement.quality     --adapter adk --runs 1
 #    on every run; findings are evidence, never repairs)
 ```
 
+### The variety experiment — 1000 campaigns
+
+A large, balanced generation experiment: 8 pretexts × 4 tones ×
+3 difficulties = **96 spec cells** × 12 internal recipients × 6 local models
+= **1000 campaigns** through the real ADK pipeline, each with a unique seed,
+the coherence validation, and the post-run quality scan. Resumable and
+piloted:
+
+```bash
+python scripts/variety_experiment.py --pilot     # 2 runs per model (12 total)
+python scripts/variety_experiment.py             # the full 1000-run experiment
+python scripts/variety_experiment.py --workers 2 # ... two models in parallel
+
+python scripts/variety_report.py --out experiment/variety-<timestamp>
+# → quality.json (aggregate payload), summary.md, charts/*.png
+#   (flag rates per check / pretext / model, contamination, label audit,
+#    coherence failures, durations, cumulative findings, heatmap)
+```
+
+Per-run artifacts (campaign, coherence report, quality report) land under
+`experiment/variety-*/models/<model>/<run_id>/`; every outcome is appended to
+the append-only `runs.jsonl`, so an interrupted run resumes where it stopped
+(completed runs are skipped, failed ones retried). The report can be re-run
+mid-experiment to watch the metrics accumulate.
+
 Prefer the HTTP service? The same engine is exposed as an API:
 
 ```bash

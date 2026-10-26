@@ -4,6 +4,39 @@
 > (el resto del repo sigue la convención en inglés). Entradas en orden
 > cronológico; los hallazgos se registran con fecha, evidencia y estado.
 
+## 2026-10-26 — Experimento de variedad: 1000 campañas (design + harness)
+
+Preparación del experimento grande de generación variada
+(`scripts/variety_experiment.py` + `scripts/variety_report.py`):
+
+- **Diseño balanceado:** 8 pretextos × 4 tonos × 3 dificultades = 96 celdas
+  de spec × 12 destinatarios internos × 6 modelos locales (Ollama) = 1000
+  campañas por el pipeline ADK real. 576 runs base (cada par modelo×celda una
+  vez) + 424 extras barajados con semilla de diseño fija, distribuidos
+  parejo por modelo (166–167 cada uno). Semilla única por run (1000 + índice)
+  → tokens de tracking únicos y reproducción exacta de cualquier run.
+- **Métricas por run:** validación de coherencia (5 checks), quality scan
+  completo (9 checks + label audit + strip stats) y metadatos de refinamiento
+  (`n_attempts`, `refined`, raw link violations primer intento vs final).
+  Artifacts completos por run bajo `experiment/variety-*/models/<model>/<run_id>/`
+  y manifest append-only `runs.jsonl` → **resumible**: los runs ok se saltan
+  al reiniciar, los fallidos se reintentan.
+- **Reporte:** `scripts/variety_report.py` agrega el manifest (dedupe por
+  run_id, última línea gana) y genera `quality.json`, `summary.md` y 10
+  gráficos matplotlib: findings por check, tasas por pretexto/modelo,
+  contaminación por categoría, label audit, coherencia, duraciones, strip
+  stats, **acumulado de findings sobre el orden de runs** y heatmap
+  pretexto × check.
+- **Pilot-first:** se corre primero `--pilot` (2 runs por modelo = 12) para
+  validar el harness; la corrida completa (~1000 × 20–60s ≈ 6–16 h con GPU
+  local) se lanza después de revisar el reporte del pilot.
+- **Aislamiento por modelo:** un subproceso hijo por modelo (patrón de
+  `ollama_experiment.py`): `ADK_MODEL=ollama/<model>` se fija antes del import
+  de `agent.pipeline`, con timeout por run vía `SIGALRM` (600s default) y
+  `--workers` para paralelizar modelos.
+
+---
+
 ## 2026-10-26 — Pipeline de quality checks post-run (metodología COVA-X)
 
 Implementación del quality lifecycle del paper de expansión de dataset
