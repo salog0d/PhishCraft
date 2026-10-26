@@ -19,3 +19,6 @@ data/measurements/reliability-*/
 data/measurements/reproduce-*/
 data/measurements/quality-*/
 data/measurements/_*
+
+# Experiment outputs (generated data, kept out of version control)
+experiment/variety-*/
