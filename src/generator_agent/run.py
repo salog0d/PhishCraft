@@ -22,7 +22,7 @@ from pathlib import Path
 from agent.driver import run_pipeline
 from generator_agent.catalog import load_catalog, profile_for
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_MISSION = REPO_ROOT / "config" / "q3-awareness-2026.mission.json"
 
 

@@ -38,7 +38,7 @@ from measurement.runner import run_spec
 from measurement.specs import baseline_specs
 from quality_agent.scan import CHECK_NAMES as QUALITY_CHECKS
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 ARTIFACT_CHECKS = [c for c in QUALITY_CHECKS if "contamination" not in c]
 CONTAMINATION_CHECKS = [c for c in QUALITY_CHECKS if "contamination" in c]

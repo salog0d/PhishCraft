@@ -15,10 +15,10 @@ from pathlib import Path
 from app.core.schemas import GeneratedCampaign
 from validator_agent.validate import validate_campaign
 
-KNOWN_BAD = Path(__file__).resolve().parent.parent / "data" / "measurements" / \
+KNOWN_BAD = Path(__file__).resolve().parent.parent.parent / "data" / "measurements" / \
     "known-case" / "generated_campaign.json"
 
-CEO_SELF = Path(__file__).resolve().parent.parent / "data" / "measurements" / \
+CEO_SELF = Path(__file__).resolve().parent.parent.parent / "data" / "measurements" / \
     "known-case" / "ceo_self_impersonation.json"
 
 ALL_CHECKS = {

@@ -54,7 +54,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MISSION_PATH = REPO_ROOT / "config" / "q3-awareness-2026.mission.json"
-sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 # --------------------------------------------------------------------------- #
 # Design constants

@@ -32,7 +32,7 @@ from rich.text import Text
 from ptshell import config as cfg_mod
 from ptshell.config import KNOWN_MODELS
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # --------------------------------------------------------------------- #
 # PhishCraft look & feel: a purple + white palette (dim greys allowed).

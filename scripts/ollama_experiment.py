@@ -37,7 +37,7 @@ MISSION_PATH = REPO_ROOT / "config" / "q3-awareness-2026.mission.json"
 EXPERIMENT_DIR = REPO_ROOT / "experiment"
 
 # Make the repo packages importable when this script is run from anywhere.
-sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 # The one fixed spec every model must run (same defaults as the CLI).
 FIXED_SPEC = {

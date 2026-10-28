@@ -32,7 +32,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from quality_agent.scan import CHECK_NAMES as QUALITY_CHECKS
 CONTAMINATION_CHECKS = [c for c in QUALITY_CHECKS if "contamination" in c]

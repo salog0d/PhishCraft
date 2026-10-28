@@ -39,6 +39,10 @@
 
 ### Install
 
+The source lives under `src/` (the standard `src` layout), so install it in
+editable mode — this puts the packages on `sys.path` for the `python -m`
+entry points and the scripts.
+
 ```bash
 # 1. Clone
 git clone <repository-url>
@@ -51,7 +55,7 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. (Optional) Install the CLI in editable mode
+# 4. Install the package in editable mode (required for `python -m` entry points)
 pip install -e .
 ```
 
@@ -257,13 +261,21 @@ Every file's job, grouped by directory.
 
 ### Root
 
+All source packages now live under `src/` (the standard `src` layout); the
+`###` sections below describe the packages by name (e.g. `agent/` means
+`src/agent/`).
+
 | File | What it is / why it matters |
 |------|------------------------------|
 | `README.md` | This file: project framing, install, quick start, and structure. |
 | `requirements.txt` | Pinned dependencies (`google-adk`, `litellm`, `fastapi`, `pydantic`, …). |
+| `pyproject.toml` | Package metadata + build config (`src/` layout) and pytest config. |
 | `compose.yaml` | Local MailHog SMTP sink used by `--send` (delivery sandbox). |
 | `implementation-instructions.md` | Step-by-step execution plan (ADK pipeline + measurement) for an implementing agent. |
 | `.gitignore` | Excludes `venv/`, caches, `.env`, and other non-versioned files. |
+| `src/` | All Python packages (`agent`, `app`, `generator_agent`, `measurement`, `monitoring`, `ptshell`, `quality_agent`, `validator_agent`) and `tests`. |
+| `config/`, `org/`, `prompts/`, `data/` | Non-code inputs (mission config, personas, charters, evidence fixtures) read by relative path from the repo root. |
+| `scripts/`, `experiment/`, `docs/`, `diagrams_output/` | Tooling, run output, documentation, and rendered diagrams. |
 
 ### `agent/` — the Google ADK pipeline
 

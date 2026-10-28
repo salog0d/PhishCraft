@@ -21,7 +21,7 @@ from measurement.adapters import get_adapter
 from measurement.runner import canonical_hash, deterministic_layer_hash
 from measurement.specs import baseline_specs
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _default_mission() -> dict:
