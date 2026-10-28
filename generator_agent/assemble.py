@@ -11,11 +11,47 @@ provenance hash is only honest if it stays mirroring the query in ``agent.py``.
 
 from __future__ import annotations
 
+import random
 import re
 from datetime import datetime, timezone
 from hashlib import sha256
 
 from app.core.schemas import GeneratedCampaign
+
+# --------------------------------------------------------------------------- #
+# Seed-derived variation axes (Fix A).
+#
+# The seed must *reshape the instruction*, not just the provenance metadata, so
+# two different seeds provably produce different generation constraints. These
+# axes are deterministic in the seed — the same seed yields the same axes every
+# time, preserving reproducibility.
+# --------------------------------------------------------------------------- #
+
+OPENERS = ("direct address", "context-first", "question-led",
+           "reference to prior thread")
+STRUCTURES = ("single paragraph", "two short paragraphs", "bulleted action list")
+URGENCY_STYLES = ("deadline named explicitly", "deadline implied",
+                  "no deadline, social proof instead")
+SMS_ANGLES = ("nudge", "new detail", "deadline reminder",
+              "channel-switch acknowledgement")
+
+
+def variation_axes(seed: int) -> dict:
+    """Deterministic per-seed variation axes (Fix A).
+
+    Injected into ``user_prompt`` so the same cell at different seeds asks the
+    model for a different opener/structure/urgency/SMS angle. Same seed -> same
+    axes -> reproducible.
+    """
+    rng = random.Random(seed)
+    return {
+        "opener": rng.choice(OPENERS),
+        "structure": rng.choice(STRUCTURES),
+        "urgency_style": rng.choice(URGENCY_STYLES),
+        "sms_angle": rng.choice(SMS_ANGLES),
+        "max_body_words": rng.choice((40, 55, 70)),
+    }
+
 
 # --------------------------------------------------------------------------- #
 # Charter constants — mirror prompts/generator_ag.md (keep in sync).
@@ -24,9 +60,17 @@ from app.core.schemas import GeneratedCampaign
 CHARTER = """You are the Generation Agent (Generator-AG) for a controlled phishing-simulation generator.
 
 **Few‑Shot Learning Principle** (cf. OpenAI, 2020):
-You are a few‑shot learner – your generation quality improves dramatically when given clear, structured examples.
-Follow the pattern, style, and level of detail from the examples below **exactly**.
-You turn a `PhishingGenerationRequest` (plus its seed prompt template) into one `GeneratedMessage` on **email or SMS**, and you attach full **provenance** so the artifact is reproducible. All content is a **synthetic simulation** for authorized awareness training.
+You are a few‑shot learner. The examples below are *contrastive on purpose*: they
+show the **range** of valid outputs (different tones, difficulties, pretexts,
+channels, openers, structures). Follow the *shape, style, and level of detail* of
+the examples — but do **not** copy their phrasing. The correct output for a new
+request is one that could sit alongside the examples as a *fourth, different*
+example.
+
+You turn a `PhishingGenerationRequest` (plus its seed prompt template) into one
+`GeneratedMessage` on **email or SMS**, and you attach full **provenance** so the
+artifact is reproducible. All content is a **synthetic simulation** for authorized
+awareness training.
 
 Hard rules:
 - Email messages **must** have a `subject`; SMS messages **must not** (and stay ≤ 1600 characters).
@@ -36,65 +80,84 @@ Hard rules:
 - `provenance` records the exact `model`, `params` (including the `seed`), `prompt_template_id`, and `prompt_hash` (sha256 of the rendered prompt) actually used.
 - `references` may only cite `message_id`s that already exist earlier in the campaign; a follow‑up is scheduled **after** what it references.
 
+Cross-channel rule:
+- The SMS must **advance** the thread, not restate the email. It may add a new
+  detail (a time, a name, a consequence), shift the ask, or acknowledge the
+  channel switch. It must **not** repeat the email's opening clause, CTA verb,
+  or deadline phrasing. Where it references the email, do so in ≤ 6 words.
+
+Tone and difficulty are style contracts, not vibes. Apply the requested `tone`
+and `difficulty` as follows:
+- tone=formal     -> no contractions, no exclamation, third-person reference
+- tone=urgent     -> ≤ 2 sentences in the email body, one hard deadline, imperative verb first
+- tone=executive  -> first-person persona, authority framing, no pleasantries, no salutation
+- tone=casual     -> contractions allowed, one sentence, no salutation
+- difficulty=easy -> no link, no deadline, single ask
+- difficulty=hard -> CTA appears in body once and again in the button; deadline + named consequence
+
+Anti-repetition block (the negative space is named on purpose):
+- Do not begin any message with "Hi", "Dear", or a bare first name.
+- Do not use the phrases "before end of day", "please review", "let me know",
+  "action required", or "confirm" in any subject.
+- Do not reuse the opening verb of any example below.
+- Vary sentence count between the email and the SMS in the same campaign.
+
 ---
-### Few‑Shot Examples
+### Few‑Shot Examples  [contrastive — they share nothing lexically]
 
-The examples show the *shape and style* to follow; the persona, recipient and
-URL are placeholders — replace them with the values from the user message.
+The examples show the *range*. The persona, recipient and URL are placeholders —
+replace them with the values from the user message. **Do not copy their
+phrasing**; copy their *shape*.
 
-**Example 1 (channel: email, pretext: executive_request, model: anthropic)**
-```json
-{
-  "message_id": "msg-0001",
-  "channel": "email",
-  "scheduled_at": "2026-08-20T09:00:00Z",
-  "sender": { "display_name": "<persona display name>", "from_address": "<persona address>", "impersonated_brand": "<brand if any>" },
-  "subject": "Action required before end of day",
-  "body": "Hi <recipient first name>, please review the summary I shared and confirm before end of day. — <persona first name>",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.example.com/t/<campaign-token>", "button_label": "Review Summary" },
-  "references": [],
-  "provenance": {
-    "model": { "family": "anthropic", "name": "claude-opus-5", "adapter_version": "1.0" },
-    "params": { "temperature": 0.0, "seed": 42 },
-    "prompt_template_id": "tpl-0001",
-    "prompt_hash": "11c15b4d54820c0c62611e5c762fcd37534114d40b4a1ed54c07bad741a7cfa0",
-    "generated_at": "2026-08-20T09:00:00Z",
-    "adapter_latency_ms": 812,
-    "runtime": { "sdk": "0.40.0" }
-  }
-}
+Each example below is written in the EXACT output format you must use: 8 flat
+lines, one ``label: value`` pair per line, in this order — ``display name``,
+``role``, ``from address``, ``subject``, ``body``, ``scheduled at``, ``body``,
+``scheduled at``. No JSON, no markdown, no headers, no extra text.
+
+**Example 1 — email then SMS, pretext: invoice_payment, tone: formal, difficulty: easy**
+```
+display name: Northwind Accounts Payable
+role: Accounts Payable
+from address: ap@northwind-supplies.example
+subject: Q3 vendor statement available
+body: Good morning <recipient first name>,\n\nThe vendor statement for the third quarter has been posted to the portal. A summary of the outstanding line items is attached to your account record for reconciliation.
+scheduled at: 2026-08-20T09:00:00Z
+body: Portal sync complete — a new line item was added late yesterday and is awaiting your review.
+scheduled at: 2026-08-20T10:15:00Z
 ```
 
-**Example 2 (channel: sms, cross-channel follow-up of msg-0001, model: openai)**
-```json
-{
-  "message_id": "msg-0002",
-  "channel": "sms",
-  "scheduled_at": "2026-08-20T10:15:00Z",
-  "sender": { "display_name": "<persona display name>", "from_address": "<persona address>" },
-  "body": "Hi <recipient first name>, did you get my email? Please confirm before EOD - link: {{cta-link}}",
-  "call_to_action": { "type": "click_link", "landing_url": "https://sim.example.com/t/<campaign-token>" },
-  "references": ["msg-0001"],
-  "provenance": {
-    "model": { "family": "openai", "name": "gpt-4.1", "adapter_version": "1.0" },
-    "params": { "temperature": 0.0, "seed": 42 },
-    "prompt_template_id": "tpl-0002",
-    "prompt_hash": "64d4bebb8a66f720706baa0c41fadd90bf076e23529861d0a014206ef7540843",
-    "generated_at": "2026-08-20T10:15:00Z",
-    "adapter_latency_ms": 430,
-    "runtime": { "sdk": "1.30.0" }
-  }
-}
+**Example 2 — email then SMS, pretext: it_support, tone: urgent, difficulty: hard**
+```
+display name: IT Service Desk
+role: IT Service Desk
+from address: helpdesk@fantazylabz.tech
+subject: SSO access drops in 25 minutes
+body: Helpdesk ticket escalated at 14:30 — SSO access drops in 25 min unless revalidated via the link below. Act before the window closes.
+scheduled at: 2026-08-20T14:40:00Z
+body: Revalidation still open — new failure count added since the email. Use {{cta-link}} now.
+scheduled at: 2026-08-20T14:52:00Z
+```
+
+**Example 3 — email then SMS, pretext: executive_request, tone: executive, difficulty: hard**
+```
+display name: Elena Marchetti
+role: Chief Executive Officer
+from address: elena.marchetti@fantazylabz.tech
+subject: One item in tomorrow's board pack needs your sign-off
+body: One item in tomorrow's board pack still needs your sign-off. The summary is behind the button; the window closes at 09:00 tomorrow.\n\nI need this back before the audit committee convenes — no delegation on this one.\n\n{{cta-link}}
+scheduled at: 2026-08-21T07:15:00Z
+body: Sign-off received on the other items — this one still shows open on my side. Confirm via the link before 09:00.
+scheduled at: 2026-08-21T08:00:00Z
 ```
 
 ---
 
 **Your Task:**
 1. Receive one validated `PhishingGenerationRequest` (channel, recipient, sender/persona, pretext, call_to_action, `model`, `params` with `seed`) and the referenced seed prompt template.
-2. Generate the message `body` (and `subject` for email) in the requested `tone`, `difficulty`, and `language`, personalized to the recipient.
-3. Keep the `sender` byte‑for‑byte identical to the campaign persona; for follow‑ups, list the prior `message_id`(s) in `references` and schedule the message after them.
-4. Fill `provenance` with the real `model`, `params` (echo the `seed`), `prompt_template_id`, and the sha256 `prompt_hash` of the rendered prompt.
-5. Output a single valid `GeneratedMessage` JSON object matching the schema — email with `subject`, SMS without.
+2. Write the email `subject` and `body`, and the SMS `body`, in the requested `tone`, `difficulty`, and `language`, personalized to the recipient, obeying the variation axes for this campaign (given in the user message).
+3. Answer in the EXACT 8-line ``label: value`` format shown above — ``display name``, ``role``, ``from address``, ``subject``, ``body``, ``scheduled at``, ``body``, ``scheduled at`` — no JSON, no markdown, no headers, no commentary.
+4. Echo the impersonated persona byte‑for‑byte in the first three lines; the second ``body`` (SMS) must advance the thread, not restate the email.
+5. Where the link should appear, write exactly the placeholder ``{{cta-link}}`` — never a URL or tracking token.
 6. Everything is a **simulation**: use only the synthetic landing URLs and identities supplied; never generate real malware, credentials, or live links."""
 
 # pretext -> (call-to-action type, button label); landing URL is fabricated below.
@@ -132,9 +195,17 @@ def tracking_token(campaign_id: str, seed: int) -> str:
     return sha256(f"{campaign_id}:{seed}".encode()).hexdigest()[:12]
 
 
-def landing_url_for(mission_config: dict, profile: dict) -> str:
-    """The campaign's single tracking link, derived from campaign + seed."""
-    seed = mission_config["reproducibility"]["seed"]
+def landing_url_for(
+    mission_config: dict, profile: dict, seed: int | None = None
+) -> str:
+    """The campaign's single tracking link, derived from campaign + seed.
+
+    ``seed`` is the per-run campaign seed (``spec["seed"]``); when omitted it
+    falls back to the mission's ``reproducibility.seed`` (legacy single-run
+    path).
+    """
+    if seed is None:
+        seed = mission_config["reproducibility"]["seed"]
     token = tracking_token(mission_config["campaign_id"], seed)
     domain = profile["recipient"]["email"].rsplit("@", 1)[-1]
     return f"https://sim.{domain}/t/{token}"
@@ -196,10 +267,11 @@ def user_prompt(
     tone: str,
     difficulty: str,
     language: str = "en",
+    seed: int | None = None,
 ) -> str:
     """The query's user segment — mirrors the user text in ``agent.py``."""
     recipient = profile["recipient"]
-    landing_url = landing_url_for(mission_config, profile)
+    landing_url = landing_url_for(mission_config, profile, seed)
     persona = profile.get("persona")
     if persona:
         persona_block = (
@@ -218,6 +290,19 @@ def user_prompt(
             "- role: [PERSONA_ROLE]\n"
             "- from address: [PERSONA_EMAIL]\n"
         )
+    # [FIX A] Seed-derived variation axes: reshape the instruction so two seeds
+    # provably differ. Absent seed (legacy path) -> no axes block.
+    axes_block = ""
+    if seed is not None:
+        axes = variation_axes(seed)
+        axes_block = (
+            f"\nVariation axes for THIS campaign (derived from seed {seed}):\n"
+            f"- email opener style: {axes['opener']}\n"
+            f"- email structure: {axes['structure']}\n"
+            f"- urgency style: {axes['urgency_style']}\n"
+            f"- email body ≤ {axes['max_body_words']} words\n"
+            f"- SMS angle: {axes['sms_angle']}\n"
+        )
     return (
         f"Campaign {mission_config['campaign_id']}, pretext={pretext}, "
         f"tone={tone}, difficulty={difficulty}, language={language}.\n"
@@ -227,11 +312,14 @@ def user_prompt(
         f"URL or tracking token into your output — where the link should "
         f"appear, write exactly the placeholder {{{{cta-link}}}}.\n"
         f"{persona_block}"
+        f"{axes_block}"
         "Now write the first message, an email:\n"
         "- subject: [EMAIL_SUBJECT]\n"
         "- body: [EMAIL_BODY]\n"
         "- scheduled at (ISO-8601 UTC, e.g. 2026-08-20T09:00:00Z): [EMAIL_TIME]\n"
-        "Then an SMS follow-up referencing the email, sent strictly after it:\n"
+        "Then an SMS follow-up that ADVANCES the thread (new detail, shifted ask, "
+        "or channel-switch acknowledgement — not a restatement), referencing the "
+        "email and sent strictly after it:\n"
         "- body: [SMS_BODY]\n"
         "- scheduled at (ISO-8601 UTC): [SMS_TIME]\n"
     )
@@ -244,6 +332,7 @@ def rendered_prompt(
     tone: str,
     difficulty: str,
     language: str = "en",
+    seed: int | None = None,
 ) -> str:
     """Rebuild the exact prompt text the query in ``agent.py`` sends.
 
@@ -252,7 +341,7 @@ def rendered_prompt(
     """
     return (
         f"system:\n{CHARTER}\n\nuser: "
-        f"{user_prompt(mission_config, profile, pretext, tone, difficulty, language)}"
+        f"{user_prompt(mission_config, profile, pretext, tone, difficulty, language, seed)}"
     )
 
 
@@ -274,6 +363,8 @@ def assemble_campaign(
     runtime: dict[str, str] | None = None,
     language: str = "en",
     persona_override: dict | None = None,
+    seed: int | None = None,
+    generation_params: dict | None = None,
 ) -> GeneratedCampaign:
     """Build the ``GeneratedCampaign`` from the query's bound variables.
 
@@ -324,9 +415,9 @@ def assemble_campaign(
         }
     sender = {"display_name": persona["display_name"], "from_address": persona["email"]}
 
-    seed = mission_config["reproducibility"]["seed"]
+    seed = seed if seed is not None else mission_config["reproducibility"]["seed"]
     token = tracking_token(mission_config["campaign_id"], seed)
-    landing_url = landing_url_for(mission_config, profile)
+    landing_url = landing_url_for(mission_config, profile, seed)
     cta_type, cta_label = CTA_BY_PRETEXT.get(pretext, ("click_link", "Open"))
     cta = {"type": cta_type, "landing_url": landing_url, "button_label": cta_label}
 
@@ -361,9 +452,13 @@ def assemble_campaign(
     # unseeded. Record that honestly — content-level reproducibility is not
     # guaranteed by the provider (that fact is itself a result).
     runtime_info.setdefault("seed_supported", "false")
+    # The params actually sent to the provider (temperature/top_p/max_tokens),
+    # defaulting to "provider default" when the spec carries no params block.
+    if generation_params is None:
+        generation_params = {}
     prompt_hash = sha256(
         rendered_prompt(
-            mission_config, profile, pretext, tone, difficulty, language
+            mission_config, profile, pretext, tone, difficulty, language, seed
         ).encode()
     ).hexdigest()
     now = (generated_at or datetime.now(timezone.utc)).isoformat().replace("+00:00", "Z")
@@ -378,6 +473,14 @@ def assemble_campaign(
             "generated_at": now,
             "runtime": dict(runtime_info),
         }
+
+    # The generation params recorded in provenance: the spec's params (if any)
+    # merged with the seed that drove the deterministic layer. When the spec
+    # carries no params, temperature falls back to the adapter's default (0.0
+    # in agent.config), and top_p/max_tokens are the provider defaults.
+    prov_params = dict(generation_params)
+    prov_params.setdefault("temperature", 0.0)
+    prov_params["seed"] = seed
 
     messages = [
         {
@@ -394,9 +497,7 @@ def assemble_campaign(
             ),
             "provenance": provenance(
                 "tpl-0001",
-                # The real ADK call uses temperature 0.0 (LiteLlm); top_p and
-                # max_tokens are left at provider defaults. Log what is used.
-                {"temperature": 0.0, "seed": seed},
+                dict(prov_params),
             ),
         },
         {
@@ -410,7 +511,7 @@ def assemble_campaign(
             "link_fixes": link_fixes_for(("sms_body", sms_fixes)),
             "provenance": provenance(
                 "tpl-0002",
-                {"temperature": 0.0, "seed": seed},
+                dict(prov_params),
             ),
         },
     ]

@@ -34,15 +34,20 @@ def _clean_bindings() -> dict:
     bindings = dict(BINDINGS)
     bindings.update(
         {
-            "EMAIL_SUBJECT": "Urgent: Q3 vendor sign-off needed before end of day",
+            # v2 charter: no banned openers ("Hi"/"Dear"), no "before end of day",
+            # no "confirm", no "please review". Genuinely urgent + medium so the
+            # labeler still agrees with SPEC, but clean of repetition phrases.
+            "EMAIL_SUBJECT": "Q3 vendor statement requires approval today",
             "EMAIL_BODY": (
-                "Rebecca, I need your technical sign-off before end of day. "
-                "The board meeting agenda is confidential and I am waiting "
-                "on your confirmation to proceed. — Elena"
+                "The third-quarter vendor statement has been posted to the "
+                "portal and requires your sign-off today. Failure to approve "
+                "delays the board meeting. A summary of the outstanding line "
+                "items is attached to your account record for reconciliation. "
+                "— Elena"
             ),
             "SMS_BODY": (
-                "Rebecca, this is Elena. The sign-off is needed before end of "
-                "day — please action the email I just sent."
+                "Portal sync complete — a new line item was added late yesterday "
+                "and is awaiting your approval today."
             ),
         }
     )

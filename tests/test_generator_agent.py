@@ -73,7 +73,8 @@ def test_followup_is_scheduled_after_the_email():
 
 def test_provenance_hash_matches_the_rendered_prompt():
     expected = sha256(
-        rendered_prompt(MISSION, PROFILE, "executive_request", "urgent", "medium").encode()
+        rendered_prompt(MISSION, PROFILE, "executive_request", "urgent", "medium",
+                        seed=42).encode()
     ).hexdigest()
     for message in CAMPAIGN.messages:
         assert message.provenance.prompt_hash == expected
@@ -119,6 +120,48 @@ def test_tracking_token_is_seed_derived_not_random():
         assert url.endswith("/t/" + tracking_token("q3-awareness-2026", 42))
 
 
+def test_tracking_token_varies_with_per_run_seed():
+    """Regression: the per-run ``spec["seed"]`` must drive a unique token.
+
+    Every run in the variety experiment gets seed 1000+i; the assembled
+    landing URL must differ per seed rather than collapsing to the mission's
+    fixed reproducibility seed.
+    """
+    from generator_agent.assemble import tracking_token
+
+    def token_for(seed: int) -> str:
+        campaign = assemble_campaign(
+            BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
+            seed=seed,
+        )
+        tokens = {
+            str(m.call_to_action.landing_url).split("/t/")[-1]
+            for m in campaign.messages
+        }
+        assert len(tokens) == 1  # both messages share the campaign token
+        return tokens.pop()
+
+    a, b = token_for(1001), token_for(1002)
+    assert a != b
+    assert a == tracking_token("q3-awareness-2026", 1001)
+    assert b == tracking_token("q3-awareness-2026", 1002)
+    # Backward-compatible default still uses the mission seed.
+    assert token_for(42) == tracking_token("q3-awareness-2026", 42)
+
+
+def test_per_run_seed_is_reflected_in_prompt_hash():
+    """Different seeds render different prompts, so the provenance hash differs."""
+    h1 = assemble_campaign(
+        BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
+        seed=1001,
+    ).messages[0].provenance.prompt_hash
+    h2 = assemble_campaign(
+        BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
+        seed=1002,
+    ).messages[0].provenance.prompt_hash
+    assert h1 != h2
+
+
 def test_normalize_body_links_rewrites_stale_tokens():
     """Stale tokens copied into prose are rewritten to the campaign token."""
     from generator_agent.assemble import normalize_body_links
@@ -159,6 +202,34 @@ def test_expand_link_placeholders_substitutes_the_landing_url():
     assert expand_link_placeholders("Click {{cta-link}} now", url) == \
         f"Click {url} now"
     assert expand_link_placeholders("no link here", url) == "no link here"
+
+
+def test_parse_bindings_unescapes_literal_newlines():
+    """Regression: literal ``\\n`` text (qwen3:4b) becomes real line breaks.
+
+    Some models escape line breaks inside a single-line body as ``\\n``. The
+    assembler must unescape them so the delivered artifact carries actual
+    newlines instead of backslash-n text a recipient would see verbatim.
+    """
+    from agent.assembler import parse_bindings
+
+    raw = (
+        "display name: IT Service Desk\n"
+        "role: IT Service Desk\n"
+        "from address: helpdesk@fantazylabz.tech\n"
+        "subject: Urgent reset\n"
+        "body: Hi there,\\n\\nPlease click the link below.\\n\\nThanks,\\nSupport\n"
+        "scheduled at: 2026-08-20T09:00:00Z\n"
+        "body: Did you get my email? See link.\\n\\n— Support\n"
+        "scheduled at: 2026-08-20T09:15:00Z"
+    )
+    bindings = parse_bindings(raw)
+    assert bindings["EMAIL_BODY"] == (
+        "Hi there,\n\nPlease click the link below.\n\nThanks,\nSupport"
+    )
+    assert bindings["SMS_BODY"] == "Did you get my email? See link.\n\n— Support"
+    assert "\\n" not in bindings["EMAIL_BODY"]
+    assert "\\n" not in bindings["SMS_BODY"]
 
 
 def test_placeholder_is_expanded_and_not_recorded_as_a_link_fix():
@@ -338,3 +409,30 @@ def test_user_prompt_carries_the_concrete_persona_when_present():
     assert "Natalia Popov" in prompt
     assert "natalia.popov@fantazylabz.tech" in prompt
     assert "[PERSONA_NAME]" not in prompt
+
+
+def test_generation_params_are_recorded_in_provenance():
+    """Per-run sampling params (temperature/top_p/max_tokens) flow into the
+    provenance, with the seed merged in; absent params fall back to temp 0.0.
+    """
+    campaign = assemble_campaign(
+        BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
+        seed=42,
+        generation_params={"temperature": 0.8, "top_p": 0.95, "max_tokens": 700},
+    )
+    params = campaign.messages[0].provenance.params
+    assert params.temperature == 0.8
+    assert params.top_p == 0.95
+    assert params.max_tokens == 700
+    assert params.seed == 42
+
+
+def test_generation_params_default_to_temperature_zero():
+    """No params block -> the adapter default temperature (0.0) is recorded."""
+    campaign = assemble_campaign(
+        BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
+        seed=42,
+    )
+    params = campaign.messages[0].provenance.params
+    assert params.temperature == 0.0
+    assert params.seed == 42

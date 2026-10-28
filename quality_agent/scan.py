@@ -75,7 +75,6 @@ def scan_campaign(
     scan; both are optional so the scanner also works on bare saved
     artifacts. ``known_names`` overrides the org-chart roster (tests).
     """
-    del mission  # reserved for future quality checks (e.g. mission scope)
     names = tuple(known_names) if known_names is not None else catalog_names()
     fields = _fields(campaign)
     persona_name, recipient_name = _persona_names(campaign)

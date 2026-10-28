@@ -26,6 +26,7 @@ from app.core.schemas import QualityFinding
 from quality_agent.lexicon import (
     KNOWN_BRANDS,
     PRETEXT_TERMS,
+    excerpt,
     is_latin_typo,
     term_hits,
 )
@@ -60,7 +61,7 @@ def scan_pretext_contamination(
             findings.append(QualityFinding(
                 check="pretext_contamination",
                 field=field,
-                excerpt=_excerpt(text, term),
+                excerpt=excerpt(text, term),
                 detail=f"{other} vocabulary bleeds into a {pretext} campaign "
                        f"({len(distinct)} distinct terms: "
                        f"{', '.join(sorted(distinct))})",
@@ -93,7 +94,7 @@ def scan_name_contamination(
                 findings.append(QualityFinding(
                     check="name_contamination",
                     field=field,
-                    excerpt=_excerpt(text, name),
+                    excerpt=excerpt(text, name),
                     detail=f"roster name '{name}' appears in a campaign that "
                            f"neither impersonates nor targets it",
                 ))
@@ -109,7 +110,7 @@ def scan_name_contamination(
                     findings.append(QualityFinding(
                         check="name_contamination",
                         field=field,
-                        excerpt=_excerpt(text, (index, index + len(fused))),
+                        excerpt=excerpt(text, (index, index + len(fused))),
                         detail=f"concatenated-name artifact '{fused}' "
                                f"({first} + {second})",
                     ))
@@ -136,7 +137,7 @@ def scan_brand_contamination(
                 findings.append(QualityFinding(
                     check="brand_contamination",
                     field=field,
-                    excerpt=_excerpt(text, match.span()),
+                    excerpt=excerpt(text, match.span()),
                     detail=f"brand '{brand}' mentioned by a campaign that does "
                            f"not impersonate it",
                 ))
@@ -153,33 +154,13 @@ def scan_script_contamination(
         for char in text:
             if not is_latin_typo(char) and char not in offenders:
                 offenders.append(char)
-                if len(offenders) == 8:
-                    break
         if offenders:
             first = text.index(offenders[0])
             findings.append(QualityFinding(
                 check="script_contamination",
                 field=field,
-                excerpt=_excerpt(text, (first, first + 1)),
+                excerpt=excerpt(text, (first, first + 1)),
                 detail=f"non-Latin script characters: "
-                       f"{' '.join(offenders)} ({len(offenders)}+ distinct)",
+                       f"{' '.join(offenders)} ({len(offenders)} distinct)",
             ))
     return findings
-
-
-def _excerpt(text: str, needle, width: int = 80) -> str:
-    """A trimmed evidence snippet centered on the first ``needle`` match.
-
-    ``needle`` is either a search string or a ``(start, end)`` span.
-    """
-    if isinstance(needle, tuple):
-        index, end = needle[0], needle[1]
-    else:
-        index = text.casefold().find(needle.casefold())
-        end = index + len(needle)
-    left = max(0, index - width // 2)
-    right = min(len(text), max(end, index) + width // 2)
-    snippet = text[left:right].replace("\n", " ")
-    prefix = "…" if left > 0 else ""
-    suffix = "…" if right < len(text) else ""
-    return f"{prefix}{snippet.strip()}{suffix}"

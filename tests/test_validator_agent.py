@@ -75,3 +75,32 @@ def test_coherent_campaign_passes_all_checks():
     assert len(report.results) == 5
     by_check = {r.check.value: r for r in report.results}
     assert by_check["sender_recipient"].passed is True
+
+
+def test_literal_newline_after_url_is_not_a_link_failure():
+    """Regression: a URL followed by literal ``\\n`` text must not parse as a
+    foreign token.
+
+    Some models (qwen3:4b) emit a body with the URL followed by ``\\n`` as
+    literal backslash-n text. The URL regex previously swallowed ``\\n`` into
+    the token, producing a spurious ``link_consistency`` failure even though
+    the body link matched the CTA "by construction".
+    """
+    from validator_agent.links import tokens_in
+
+    token = "ef2272f6c2ed"
+    body = (
+        "Please click:\n\nhttps://sim.fantazylabz.tech/t/ef2272f6c2ed\n\n"
+        "Best regards,\nNorthwind Supplies"
+    )
+    assert tokens_in(body) == {token}
+
+
+def test_extractor_returns_clean_hex_token():
+    """The token extractor yields exactly the 12-hex token, never trailing junk."""
+    from validator_agent.links import _token
+
+    assert _token("https://sim.example.com/t/ef2272f6c2ed") == "ef2272f6c2ed"
+    assert _token("https://sim.example.com/t/ef2272f6c2ed") != "ef2272f6c2ed\\n\\nBest"
+    # trailing punctuation is stripped, not folded into the token
+    assert _token("https://sim.example.com/t/ef2272f6c2ed.") == "ef2272f6c2ed"

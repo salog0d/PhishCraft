@@ -108,3 +108,61 @@ def test_adk_instruction_survives_state_injection():
             f"context variable '{name}'"
         )
     assert "{{cta-link}}" in instruction
+
+
+def test_findings_summary_extracts_structural_issues():
+    """The critic receives coherence failures + stage-direction/meta-bleed
+    findings, and ignores benign/clean reports."""
+    from app.core.schemas import (
+        CoherenceCheckResult,
+        CoherenceReport,
+    )
+    from quality_agent.scan import scan_campaign
+    from agent.critic import findings_summary
+
+    campaign = _campaign_with("click [HOSTAGE VOICE] the {{cta-link}}")
+    quality = scan_campaign(campaign, spec={"pretext": "executive_request"})
+    failing = CoherenceReport(
+        campaign_id=campaign.campaign_id,
+        results=[
+            CoherenceCheckResult(check="persona_identity", passed=True),
+            CoherenceCheckResult(check="timing", passed=True),
+            CoherenceCheckResult(check="cross_channel_reference", passed=True),
+            CoherenceCheckResult(check="link_consistency", passed=False,
+                                 detail="body token not in CTA"),
+            CoherenceCheckResult(check="sender_recipient", passed=True),
+        ],
+        all_passed=False,
+    )
+    problems = findings_summary(campaign, failing, quality)
+    assert any(p.startswith("[coherence:link_consistency]") for p in problems)
+    assert any(p.startswith("[stage_direction]") for p in problems)
+
+
+def test_findings_summary_is_empty_when_campaign_is_clean():
+    from app.core.schemas import CoherenceCheckResult, CoherenceReport
+    from quality_agent.scan import scan_campaign
+    from agent.critic import findings_summary
+
+    campaign = assemble_campaign(
+        dict(
+            BINDINGS,
+            EMAIL_SUBJECT="The quarterly review is ready in the portal",
+            EMAIL_BODY="The third-quarter statement is attached to your "
+                       "account record for reconciliation.",
+            SMS_BODY="Portal sync complete — a new line item was added late "
+                     "yesterday and is awaiting your review.",
+        ),
+        MISSION, PROFILE, "executive_request", "urgent", "medium",
+    )
+    quality = scan_campaign(campaign, spec={"pretext": "executive_request"})
+    clean = CoherenceReport(
+        campaign_id=campaign.campaign_id,
+        results=[
+            CoherenceCheckResult(check=c, passed=True)
+            for c in ("persona_identity", "timing", "cross_channel_reference",
+                      "link_consistency", "sender_recipient")
+        ],
+        all_passed=True,
+    )
+    assert findings_summary(campaign, clean, quality) == []

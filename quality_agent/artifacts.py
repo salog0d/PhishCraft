@@ -30,6 +30,7 @@ from quality_agent.lexicon import (
     META_BLEED_PATTERNS,
     STAGE_DIRECTION_PATTERNS,
     compile_patterns,
+    excerpt,
 )
 
 _META_BLEED = compile_patterns(META_BLEED_PATTERNS)
@@ -52,17 +53,6 @@ _SIGNOFF_VALEDICTION = re.compile(
     r"thank you),?\s*$\n^\s*([A-Z][A-Za-z.' -]{1,40})\s*$"
 )
 _DUPE_LINE = re.compile(r"(?m)^\s*(.+?)\s*$")
-
-
-def _excerpt(text: str, span: tuple[int, int], width: int = 80) -> str:
-    """A trimmed evidence snippet centered on the offending span."""
-    start, end = span
-    left = max(0, start - width // 2)
-    right = min(len(text), max(end, start) + width // 2)
-    snippet = text[left:right].replace("\n", " ")
-    prefix = "…" if left > 0 else ""
-    suffix = "…" if right < len(text) else ""
-    return f"{prefix}{snippet.strip()}{suffix}"
 
 
 def _name_in(text: str, names: tuple[str, ...], exclude: set[str]) -> str | None:
@@ -103,7 +93,7 @@ def scan_dialogue_collapse(
             findings.append(QualityFinding(
                 check="dialogue_collapse",
                 field=field,
-                excerpt=_excerpt(text, match.span()),
+                excerpt=excerpt(text, match.span()),
                 detail=f"message signed as '{name}', which is neither the "
                        f"persona nor the recipient",
             ))
@@ -115,7 +105,7 @@ def scan_dialogue_collapse(
             findings.append(QualityFinding(
                 check="dialogue_collapse",
                 field=field,
-                excerpt=_excerpt(text, match.span()),
+                excerpt=excerpt(text, match.span()),
                 detail=f"valediction signed as '{name}', which is neither the "
                        f"persona nor the recipient",
             ))
@@ -130,7 +120,7 @@ def scan_dialogue_collapse(
             findings.append(QualityFinding(
                 check="dialogue_collapse",
                 field=field,
-                excerpt=_excerpt(text, match.span()),
+                excerpt=excerpt(text, match.span()),
                 detail=f"greeting addresses '{name}' — {who}",
             ))
     return findings
@@ -144,7 +134,7 @@ def scan_stage_direction(text: str, *, field: str) -> list[QualityFinding]:
             findings.append(QualityFinding(
                 check="stage_direction",
                 field=field,
-                excerpt=_excerpt(text, match.span()),
+                excerpt=excerpt(text, match.span()),
                 detail=f"stage-direction artifact {match.group(0)!r} in prose",
             ))
     return findings
@@ -158,7 +148,7 @@ def scan_turn_overflow(text: str, *, field: str) -> list[QualityFinding]:
         findings.append(QualityFinding(
             check="turn_overflow",
             field=field,
-            excerpt=_excerpt(text, (0, min(len(text), 80))),
+            excerpt=excerpt(text, (0, min(len(text), 80))),
             detail=f"{field} is {len(text)} chars (soft limit "
                    f"{limit['soft_max']})",
         ))
@@ -166,7 +156,7 @@ def scan_turn_overflow(text: str, *, field: str) -> list[QualityFinding]:
         findings.append(QualityFinding(
             check="turn_overflow",
             field=field,
-            excerpt=_excerpt(text, (0, len(text))),
+            excerpt=excerpt(text, (0, len(text))),
             detail=f"{field} is {len(text)} chars — underdeveloped "
                    f"(floor {limit['floor']})",
         ))
@@ -181,7 +171,7 @@ def scan_meta_bleed(text: str, *, field: str) -> list[QualityFinding]:
             findings.append(QualityFinding(
                 check="meta_bleed",
                 field=field,
-                excerpt=_excerpt(text, match.span()),
+                excerpt=excerpt(text, match.span()),
                 detail=f"instruction-echo pattern {match.group(0)!r} in prose",
             ))
     return findings

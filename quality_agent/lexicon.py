@@ -145,6 +145,16 @@ META_BLEED_PATTERNS: tuple[str, ...] = (
     r"\bbindings?\b",
     r"<[a-z][a-z _-]{1,20}>",
     r"\b(phishing|smishing|social engineering)\b",
+    # v2 anti-repetition block (prompts/generator_ag.md Fix F): the mode-collapse
+    # phrases the v1 charter trained the model to parrot. Their presence in the
+    # delivered prose is evidence the generator fell back on the few-shot template.
+    r"(?i)(?m)^\s*(hi|dear|hello)\b[^,\n]{0,40}",  # banned bare opener
+    r"(?i)before end of day",
+    r"(?i)please review",
+    r"(?i)action required",
+    r"(?i)let me know",
+    r"(?i)\bconfirm\b",
+    r"(?i)did you get my email",  # SMS mirroring the email (Fix C)
 )
 
 # --------------------------------------------------------------------------- #
@@ -232,3 +242,23 @@ def term_hits(text: str, terms: tuple[str, ...]) -> dict[str, int]:
         if count:
             hits[term] = count
     return hits
+
+
+def excerpt(text: str, needle, width: int = 80) -> str:
+    """A trimmed evidence snippet centered on the first ``needle`` match.
+
+    ``needle`` is either a search string or a ``(start, end)`` span.
+    """
+    if isinstance(needle, tuple):
+        index, end = needle[0], needle[1]
+    else:
+        index = text.casefold().find(needle.casefold())
+        if index < 0:
+            return text[:width]
+        end = index + len(needle)
+    left = max(0, index - width // 2)
+    right = min(len(text), max(end, index) + width // 2)
+    snippet = text[left:right].replace("\n", " ")
+    prefix = "…" if left > 0 else ""
+    suffix = "…" if right < len(text) else ""
+    return f"{prefix}{snippet.strip()}{suffix}"
