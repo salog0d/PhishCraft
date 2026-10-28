@@ -1,0 +1,180 @@
+# PhishCraft LLM & experiment alert rules.
+#
+# All *_total metrics here are experiment gauges (cumulative totals derived
+# from runs.jsonl), so rates are computed with delta() over the alert window.
+
+groups:
+  - name: phishcraft-llm
+    rules:
+      - alert: LLMGenerationErrors
+        expr: |
+          sum by (experiment, model) (
+            delta(phishcraft_experiment_runs_total{status="generation_error"}[10m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.model }} failing to generate campaigns"
+          description: >
+            Experiment {{ $labels.experiment }}: {{ $value }} generation errors
+            on {{ $labels.model }} in the last 10 minutes. Check the model's
+            child.log for the parse/validation failure.
+
+      - alert: LLMTimeouts
+        expr: |
+          sum by (experiment, model) (
+            delta(phishcraft_experiment_runs_total{status="timeout"}[10m])
+          ) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.model }} campaign timed out"
+          description: >
+            Experiment {{ $labels.experiment }}: a {{ $labels.model }} run hit
+            the per-campaign wall-clock budget. Reasoning models (or a busy
+            GPU) are the usual cause.
+
+      - alert: LLMCallLatencyHigh
+        expr: |
+          phishcraft_experiment_llm_duration_seconds{quantile="p95"} > 240
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 LLM call latency > 4 min on {{ $labels.model }}"
+          description: >
+            Experiment {{ $labels.experiment }}: p95 LLM call duration is
+            {{ $value | printf "%.0f" }}s. A model spilling from VRAM to CPU
+            (like gemma4 on the 8 GB card) looks exactly like this.
+
+      - alert: LLMHighRetryRate
+        expr: |
+          (
+            sum by (experiment, model) (phishcraft_experiment_attempts_total)
+            /
+            clamp_min(
+              sum by (experiment, model) (
+                phishcraft_experiment_runs_total{status="ok"}
+              ), 1
+            )
+          ) > 1.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.model }} averaging > 1.5 attempts per campaign"
+          description: >
+            Experiment {{ $labels.experiment }}: mean attempts
+            {{ $value | printf "%.2f" }}. Rejection sampling and
+            self-refinement are firing often — first-attempt output quality is
+            low.
+
+      - alert: LLMErrorCalls
+        expr: |
+          delta(phishcraft_experiment_llm_errors_total[10m]) > 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLM provider errors on {{ $labels.model }}"
+          description: >
+            Experiment {{ $labels.experiment }}: {{ $value }} failed LLM calls
+            in 10 minutes. Check the Ollama daemon and the child logs.
+
+  - name: phishcraft-quality
+    rules:
+      - alert: CoherenceFailures
+        expr: sum by (experiment) (phishcraft_experiment_coherence_failures_total) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Coherence validator failures in {{ $labels.experiment }}"
+          description: >
+            {{ $value }} campaigns failed at least one of the five coherence
+            checks. By construction links are fixed by the assembler, so a
+            non-zero value means the validation layer itself regressed.
+
+      - alert: ContaminationDetected
+        expr: sum by (experiment, model) (phishcraft_experiment_contaminated_total) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Contamination findings in {{ $labels.experiment }}"
+          description: >
+            {{ $value }} {{ $labels.model }} campaigns carry contamination
+            flags (pretext/name/brand/script). Evidence for the report, not a
+            repair — but worth eyeballing the artifacts.
+
+      - alert: QualityFlagSpike
+        expr: |
+          delta(phishcraft_experiment_campaigns_flagged_total[30m]) > 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Quality findings rising fast in {{ $labels.experiment }}"
+          description: >
+            {{ $value }} new flagged campaigns in 30 minutes across the checks.
+            A prompt change or a misbehaving model usually explains a spike.
+
+      - alert: LabelMismatchRateHigh
+        expr: |
+          (
+            sum by (experiment) (phishcraft_experiment_label_mismatches_total)
+            /
+            clamp_min(
+              sum by (experiment) (phishcraft_experiment_runs_total{status="ok"}),
+              1
+            )
+          ) > 2
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Label-audit mismatches > 2 per campaign in {{ $labels.experiment }}"
+          description: >
+            {{ $value | printf "%.2f" }} mismatches per campaign on average.
+            The heuristic audit disagrees with the spec labels (tone and
+            difficulty are the usual suspects).
+
+  - name: phishcraft-infra
+    rules:
+      - alert: GPUVRAMHigh
+        expr: |
+          phishcraft_gpu_memory_used_bytes
+          / phishcraft_gpu_memory_total_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU VRAM > 90% ({{ $labels.name }})"
+          description: >
+            {{ $value | humanizePercentage }} of VRAM in use. Ollama will
+            start spilling layers to CPU RAM and generation latency explodes.
+
+      - alert: GPUTemperatureHigh
+        expr: phishcraft_gpu_temperature_celsius > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU temperature high ({{ $labels.name }})"
+          description: "GPU at {{ $value }}°C — check airflow and fan curve."
+
+      - alert: PhishcraftExporterDown
+        # phishcraft-api is excluded: it only runs while the FastAPI service
+        # is up, so "down" is its normal idle state.
+        expr: up{job=~"phishcraft-experiment|phishcraft-gpu"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} exporter down"
+          description: >
+            The {{ $labels.job }} target on {{ $labels.instance }} has not
+            answered scrapes for 5 minutes. If it's phishcraft-gpu, the GPU
+            exporter process on the host is probably not running.

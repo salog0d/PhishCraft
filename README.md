@@ -91,30 +91,39 @@ python -m measurement.quality     --adapter adk --runs 1
 #    on every run; findings are evidence, never repairs)
 ```
 
-### The variety experiment — 1000 campaigns
+### The variety experiment — temperature-swept
 
 A large, balanced generation experiment: 8 pretexts × 4 tones ×
-3 difficulties = **96 spec cells** × 12 internal recipients × 6 local models
-= **1000 campaigns** through the real ADK pipeline, each with a unique seed,
-the coherence validation, and the post-run quality scan. Resumable and
-piloted:
+3 difficulties = **96 spec cells**, sampled across **4 local models** at
+**4 temperatures** (0.0 / 0.5 / 0.8 / 1.2) — every `(model, cell)` pair is
+sampled at each temperature, so semantic variety is measured against the
+temperature axis, not only the seed-derived URL. Each run gets a unique seed,
+the coherence validation, the post-run quality scan, and the self-refinement
+critic loop. Resumable and piloted:
 
 ```bash
-python scripts/variety_experiment.py --pilot     # 2 runs per model (12 total)
-python scripts/variety_experiment.py             # the full 1000-run experiment
+python scripts/variety_experiment.py --pilot     # 2 runs per (model x temperature)
+python scripts/variety_experiment.py             # the full run
 python scripts/variety_experiment.py --workers 2 # ... two models in parallel
+python scripts/variety_experiment.py --temperatures 0.0,0.7,1.0  # custom sweep
 
 python scripts/variety_report.py --out experiment/variety-<timestamp>
 # → quality.json (aggregate payload), summary.md, charts/*.png
-#   (flag rates per check / pretext / model, contamination, label audit,
-#    coherence failures, durations, cumulative findings, heatmap)
+#   (flag/refinement/retry rates and semantic variety vs temperature,
+#    flag rates per check / pretext / model, contamination, label audit,
+#    coherence failures, durations, heatmap)
 ```
 
-Per-run artifacts (campaign, coherence report, quality report) land under
-`experiment/variety-*/models/<model>/<run_id>/`; every outcome is appended to
-the append-only `runs.jsonl`, so an interrupted run resumes where it stopped
+Per-run artifacts (campaign, coherence report, quality report, LLM trace) land
+under `experiment/variety-*/models/<model>/<run_id>/`; every outcome is appended
+to the append-only `runs.jsonl`, so an interrupted run resumes where it stopped
 (completed runs are skipped, failed ones retried). The report can be re-run
 mid-experiment to watch the metrics accumulate.
+
+The **model set** defaults to the models that reliably hold the enriched
+charter's 8-binding format (`qwen3:8b`, `llama3.1:8b`, `phi4-mini:latest`,
+`gemma4:latest`); the small 4B models (`qwen3:4b`, `llama3.2:3b`) are excluded
+because they drop the persona echo or collapse to the few-shot template.
 
 Prefer the HTTP service? The same engine is exposed as an API:
 
@@ -260,11 +269,13 @@ Every file's job, grouped by directory.
 
 | File | What it is / why it matters |
 |------|------------------------------|
-| `agent/pipeline.py` | The ADK `SequentialAgent` (the orchestrator): content `LlmAgent` → deterministic assembler → deterministic validator. |
-| `agent/config.py` | Model resolution from env (`ADK_MODEL`, `DEEPSEEK_API_KEY`); loads the gitignored `.env`; no secrets in code. |
-| `agent/assembler.py` | Stage 2: parses the 8 content bindings and calls `assemble_campaign` with the fixed clock/schedule. |
+| `agent/pipeline.py` | The ADK `SequentialAgent` (the orchestrator): content `LlmAgent` → deterministic assembler → deterministic validator. `build_pipeline(params)` builds a per-run pipeline with generation params (temperature/top_p/max_tokens). |
+| `agent/config.py` | Model resolution from env (`ADK_MODEL`, `DEEPSEEK_API_KEY`, `ADK_CRITIC_MODEL`); loads the gitignored `.env`; no secrets in code. |
+| `agent/assembler.py` | Stage 2: parses the 8 content bindings and calls `assemble_campaign` with the fixed clock/schedule and per-run seed/params. |
 | `agent/validator.py` | Stage 3: runs `validator_agent.validate_campaign` and emits the `CoherenceReport`. |
-| `agent/driver.py` | Programmatic runner: seeds session state, drives the ADK `Runner`, returns campaign + report. |
+| `agent/driver.py` | Programmatic runner: seeds session state, drives the ADK `Runner`, runs rejection-sampling + the self-refinement critic loop, returns campaign + report. |
+| `agent/critic.py` | The self-refinement critic: an LLM that turns deterministic coherence/quality findings into a corrective instruction (Reflexion loop). |
+| `agent/model_trace.py` | Full LLM-call tracing (prompt/answer/thinking/usage) to `ADK_MODEL_TRACE_FILE`, plus per-call metrics. |
 | `agent/__init__.py` | Package marker exposing `root_agent`. |
 
 ### `app/` — the FastAPI service and data contracts
@@ -274,7 +285,7 @@ Every file's job, grouped by directory.
 | `app/main.py` | FastAPI entry point (`uvicorn app.main:app`); registers routes and `/health`. |
 | `app/presentation/routes.py` | `POST /generation/messages`: validates a `PhishingGenerationRequest` and returns the 202 acknowledgement. |
 | `app/core/schemas.py` | **Single source of truth**: all Pydantic contracts (mission, generation, campaign, coherence, provenance, envelope) and their business rules. |
-| `app/application/`, `app/domain/`, `app/infra/`, `app/services/`, `app/__init__.py`, `app/presentation/__init__.py`, `app/core/__init.py__.py` | Package markers; empty placeholders for the hex/clean architecture layers. |
+| `app/__init__.py`, `app/presentation/__init__.py`, `app/core/__init__.py` | Package markers. |
 
 ### `generator_agent/` — the generator half
 
@@ -284,7 +295,6 @@ Every file's job, grouped by directory.
 | `generator_agent/catalog.py` | Loads the target catalog (12 internal + 3 external personas), builds generator profiles, and derives the impersonated persona per `(pretext, recipient)` via `persona_for`. |
 | `generator_agent/run.py` | CLI: loads a mission file, drives the ADK pipeline, writes campaign + report, optional `--send`. |
 | `generator_agent/send.py` | Delivers a campaign to the MailHog SMTP sink (email as email, SMS tagged `[SMS]`). |
-| `generator_agent/agent.py` | **Legacy reference**: the old LMQL query; superseded by the ADK content agent, kept for documentation only. |
 | `generator_agent/__init__.py` | Package marker. |
 
 ### `validator_agent/` — the deterministic validator (no LLM)
@@ -434,6 +444,27 @@ reproducibility seed, and the ethics guardrails.
   "ethics": { "consent_reference": "IRB-2026-014", "isolated_environment": true }
 }
 ```
+
+---
+
+## Observability (Grafana + Prometheus + Alertmanager)
+
+LLM-ops monitoring for every campaign and LLM call: token usage, call
+latency, retries, quality/coherence findings, and GPU/VRAM state — with
+alerts routed into the MailHog sink. See
+[`monitoring/README.md`](./monitoring/README.md).
+
+```bash
+./monitoring/start.sh
+# → Grafana      http://localhost:3000  (admin / admin, folder "PhishCraft")
+# → Prometheus   http://localhost:9099  (host 9090 is taken by a system prometheus)
+# → Alertmanager http://localhost:9093  · alerts land in MailHog http://localhost:8025
+```
+
+The variety experiment feeds it automatically: each run writes a
+`llm_trace.jsonl`, and the `runs-exporter` container turns the append-only
+`runs.jsonl` + traces into `phishcraft_experiment_*` metrics (scraped every
+15 s, so the metrics accumulate live while the experiment runs).
 
 ---
 

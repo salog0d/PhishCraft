@@ -1,0 +1,297 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Campaigns ok",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 1,
+      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "refId": "A", "expr": "sum(phishcraft_experiment_runs_total{experiment=~\"$experiment\", status=\"ok\"})" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Generation errors",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 2,
+      "gridPos": { "h": 4, "w": 3, "x": 3, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "refId": "A", "expr": "sum(phishcraft_experiment_runs_total{experiment=~\"$experiment\", status=\"generation_error\"})" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Timeouts",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 3,
+      "gridPos": { "h": 4, "w": 3, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "refId": "A", "expr": "sum(phishcraft_experiment_runs_total{experiment=~\"$experiment\", status=\"timeout\"})" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Mean attempts / campaign",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 4,
+      "gridPos": { "h": 4, "w": 3, "x": 9, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 }, "overrides": [] },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(phishcraft_experiment_attempts_total{experiment=~\"$experiment\"}) / clamp_min(sum(phishcraft_experiment_runs_total{experiment=~\"$experiment\", status=\"ok\"}), 1)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Campaign duration (mean, per model)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 5,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "phishcraft_experiment_duration_seconds{experiment=~\"$experiment\", quantile=\"mean\"}",
+          "legendFormat": "{{model}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Quality findings by check",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 6,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (check) (phishcraft_experiment_quality_findings_total{experiment=~\"$experiment\"})",
+          "legendFormat": "{{check}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Contamination by check",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 7,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (check) (phishcraft_experiment_contaminated_total{experiment=~\"$experiment\"})",
+          "legendFormat": "{{check}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Label-audit mismatches",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 8,
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (label) (phishcraft_experiment_label_mismatches_total{experiment=~\"$experiment\"})",
+          "legendFormat": "{{label}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Coherence (validator) failures",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 9,
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (check) (phishcraft_experiment_coherence_failures_total{experiment=~\"$experiment\"})",
+          "legendFormat": "{{check}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Self-refined campaigns",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 10,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "phishcraft_experiment_refined_total{experiment=~\"$experiment\"}",
+          "legendFormat": "{{model}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Raw link violations (stale tokens the LLM wrote)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 11,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "phishcraft_experiment_raw_link_violations_total{experiment=~\"$experiment\"}",
+          "legendFormat": "{{model}}",
+          "range": true
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["phishcraft", "experiment"],
+  "templating": {
+    "list": [
+      {
+        "name": "experiment",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": { "query": "label_values(phishcraft_experiment_runs_total, experiment)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "selected": false, "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "Experiment Health",
+  "uid": "phishcraft-experiment",
+  "version": 1
+}

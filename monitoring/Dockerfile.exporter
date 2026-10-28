@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir prometheus-client==0.26.0
+
+COPY runs_exporter.py /exporter/runs_exporter.py
+WORKDIR /exporter
+
+ENV RUNS_EXPORTER_DIRS=/experiment \
+    RUNS_EXPORTER_PORT=9091
+
+EXPOSE 9091
+CMD ["python", "-u", "runs_exporter.py"]

@@ -25,6 +25,11 @@ import threading
 import time
 from datetime import datetime, timezone
 
+try:
+    from monitoring import metrics
+except ImportError:  # pragma: no cover — metrics are optional
+    metrics = None
+
 _WRITE_LOCK = threading.Lock()
 
 # invocation_id -> (seq, start_monotonic, start_utc, request_record)
@@ -146,9 +151,15 @@ def _serialize_system_instruction(instruction) -> str | None:
 
 
 def before_model_callback(callback_context, llm_request):
-    """Stash the rendered request; the response callback writes the pair."""
+    """Stash the call start (and the rendered request when tracing).
+
+    The pending entry is always stashed — even without a trace file — so the
+    response callback can record duration metrics for every LLM call.
+    """
+    key = str(getattr(callback_context, "invocation_id", None))
     path = _trace_file()
     if not path:
+        _pending[key] = (None, time.monotonic(), None, None)
         return None
     global _seq
     with _WRITE_LOCK:
@@ -166,7 +177,7 @@ def before_model_callback(callback_context, llm_request):
             "contents": _serialize_contents(getattr(llm_request, "contents", [])),
         },
     }
-    _pending[str(getattr(callback_context, "invocation_id", seq))] = (
+    _pending[key] = (
         seq,
         time.monotonic(),
         _now_utc(),
@@ -176,21 +187,44 @@ def before_model_callback(callback_context, llm_request):
 
 
 def after_model_callback(callback_context, llm_response):
-    """Pair the response (thinking separated from the answer) with its request."""
-    path = _trace_file()
-    if not path:
-        return None
+    """Pair the response (thinking separated from the answer) with its request.
+
+    Metrics are recorded for every call; the trace line is only written when
+    ``ADK_MODEL_TRACE_FILE`` is set.
+    """
     key = str(getattr(callback_context, "invocation_id", None))
     pending = _pending.pop(key, None)
     if pending is None:
         return None
     seq, started_mono, started_utc, record = pending
-    record["ts_utc"] = started_utc
-    record["duration_s"] = round(time.monotonic() - started_mono, 3)
+    duration = round(time.monotonic() - started_mono, 3)
 
     content = getattr(llm_response, "content", None)
     parts = [p for p in getattr(content, "parts", None) or []]
     thoughts = [p.text for p in parts if getattr(p, "text", None) and p.thought]
+    usage = getattr(llm_response, "usage_metadata", None)
+
+    if metrics is not None:
+        model = (record or {}).get("model") if record else None
+        if model is None:
+            model = getattr(llm_response, "model_version", None)
+        metrics.record_llm_call(
+            model=metrics.normalize_model(model),
+            agent=(record or {}).get("agent"),
+            status="ok",
+            duration_s=duration,
+            prompt_tokens=getattr(usage, "prompt_token_count", None),
+            completion_tokens=getattr(usage, "candidates_token_count", None),
+            total_tokens=getattr(usage, "total_token_count", None),
+            thinking_chars=sum(len(t) for t in thoughts),
+        )
+
+    path = _trace_file()
+    if not path:
+        return None
+    record["ts_utc"] = started_utc
+    record["duration_s"] = duration
+
     answers = [p.text for p in parts if getattr(p, "text", None) and not p.thought]
     record["response"] = {
         "thought": "\n".join(thoughts) if thoughts else None,
@@ -199,7 +233,6 @@ def after_model_callback(callback_context, llm_response):
         "error_code": getattr(llm_response, "error_code", None),
         "error_message": getattr(llm_response, "error_message", None),
     }
-    usage = getattr(llm_response, "usage_metadata", None)
     record["response"]["usage"] = {
         "prompt_tokens": getattr(usage, "prompt_token_count", None),
         "completion_tokens": getattr(usage, "candidates_token_count", None),
@@ -211,15 +244,28 @@ def after_model_callback(callback_context, llm_response):
 
 def on_model_error_callback(callback_context, llm_request, error):
     """Record model-call failures (timeouts, provider errors, ...)."""
+    key = str(getattr(callback_context, "invocation_id", None))
+    pending = _pending.pop(key, None)
+    duration = None
+    if pending is not None:
+        _seq_stash, started_mono, _started_utc, record = pending
+        duration = round(time.monotonic() - started_mono, 3)
+
+    if metrics is not None:
+        metrics.record_llm_call(
+            model=metrics.normalize_model(getattr(llm_request, "model", None)),
+            agent=getattr(callback_context, "agent_name", None),
+            status="error",
+            duration_s=duration,
+        )
+
     path = _trace_file()
     if not path:
         return None
-    key = str(getattr(callback_context, "invocation_id", None))
-    pending = _pending.pop(key, None)
     if pending is not None:
         seq, started_mono, started_utc, record = pending
         record["ts_utc"] = started_utc
-        record["duration_s"] = round(time.monotonic() - started_mono, 3)
+        record["duration_s"] = duration
     else:
         global _seq
         with _WRITE_LOCK:

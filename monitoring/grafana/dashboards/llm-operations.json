@@ -1,0 +1,221 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "LLM calls",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 1,
+      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(phishcraft_experiment_llm_calls_total{experiment=~\"$experiment\"})"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Total tokens",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 2,
+      "gridPos": { "h": 4, "w": 3, "x": 3, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(phishcraft_experiment_llm_tokens_total{experiment=~\"$experiment\", type=\"total\"})"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "LLM errors",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 3,
+      "gridPos": { "h": 4, "w": 3, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(phishcraft_experiment_llm_errors_total{experiment=~\"$experiment\"})"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Thinking chars",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 4,
+      "gridPos": { "h": 4, "w": 3, "x": 9, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(phishcraft_experiment_llm_thinking_chars_total{experiment=~\"$experiment\"})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "LLM call latency (p95, per model)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 5,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "phishcraft_experiment_llm_duration_seconds{experiment=~\"$experiment\", quantile=\"p95\"}",
+          "legendFormat": "{{model}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Tokens per model (prompt vs completion)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 6,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "stacking": { "mode": "normal", "group": "A" } }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (model, type) (phishcraft_experiment_llm_tokens_total{experiment=~\"$experiment\"})",
+          "legendFormat": "{{model}} {{type}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "LLM calls per model",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 7,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "phishcraft_experiment_llm_calls_total{experiment=~\"$experiment\"}",
+          "legendFormat": "{{model}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Per-model LLM summary",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "id": 8,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Value #A" }, "properties": [{ "id": "displayName", "value": "calls" }] },
+          { "matcher": { "id": "byName", "options": "Value #B" }, "properties": [{ "id": "displayName", "value": "errors" }] },
+          { "matcher": { "id": "byName", "options": "Value #C" }, "properties": [{ "id": "displayName", "value": "prompt tokens" }] },
+          { "matcher": { "id": "byName", "options": "Value #D" }, "properties": [{ "id": "displayName", "value": "completion tokens" }] },
+          { "matcher": { "id": "byName", "options": "Value #E" }, "properties": [{ "id": "displayName", "value": "thinking chars" }] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [], "footer": { "show": false, "reducer": ["sum"], "fields": "" } },
+      "targets": [
+        { "refId": "A", "expr": "sum by (model) (phishcraft_experiment_llm_calls_total{experiment=~\"$experiment\"})", "format": "table", "instant": true },
+        { "refId": "B", "expr": "sum by (model) (phishcraft_experiment_llm_errors_total{experiment=~\"$experiment\"})", "format": "table", "instant": true },
+        { "refId": "C", "expr": "sum by (model) (phishcraft_experiment_llm_tokens_total{experiment=~\"$experiment\", type=\"prompt\"})", "format": "table", "instant": true },
+        { "refId": "D", "expr": "sum by (model) (phishcraft_experiment_llm_tokens_total{experiment=~\"$experiment\", type=\"completion\"})", "format": "table", "instant": true },
+        { "refId": "E", "expr": "sum by (model) (phishcraft_experiment_llm_thinking_chars_total{experiment=~\"$experiment\"})", "format": "table", "instant": true }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["phishcraft", "llm"],
+  "templating": {
+    "list": [
+      {
+        "name": "experiment",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": { "query": "label_values(phishcraft_experiment_runs_total, experiment)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "selected": false, "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "LLM Operations",
+  "uid": "phishcraft-llm",
+  "version": 1
+}

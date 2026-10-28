@@ -1,10 +1,15 @@
 email-validator==2.3.0
 fastapi==0.141.1
 google-adk==2.9.2
+graphviz==0.21
 litellm==1.102.1
+matplotlib==3.11.2
+numpy==2.5.4
 prompt_toolkit==3.0.53
+prometheus-client==0.26.0
 pydantic==2.13.4
 pydantic_core==2.46.4
 rich==15.0.0
+scikit-learn==1.9.1
 starlette==1.6.0
 uvicorn==0.52.4

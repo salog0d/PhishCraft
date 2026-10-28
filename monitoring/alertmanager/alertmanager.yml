@@ -1,0 +1,33 @@
+# Alertmanager for the PhishCraft observability stack.
+#
+# Notifications land in the MailHog sink (the repo-root compose.yaml, web UI
+# at :8025) via SMTP — a real, inspectable local alerting loop with no
+# external services. Swap `receiver:` to `webhook` (and fill in the URL) to
+# route to Slack/Discord/anything else.
+
+route:
+  receiver: mailhog
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: mailhog
+    email_configs:
+      - to: alerts@phishcraft.local
+        from: alertmanager@phishcraft.local
+        smarthost: host.docker.internal:1025
+        require_tls: false
+        send_resolved: true
+
+  - name: webhook
+    webhook_configs:
+      - url: http://host.docker.internal:9999/alerts # placeholder — point at your sink
+
+inhibit_rules:
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ["alertname"]
