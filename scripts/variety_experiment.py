@@ -1,9 +1,9 @@
-"""Variety experiment: 1000 varied campaigns across the local Ollama models.
+"""Temperature-swept variety experiment across the local Ollama models.
 
 Parent mode:
 
-    python scripts/variety_experiment.py --pilot        # 2 runs per model
-    python scripts/variety_experiment.py                # the full 1000-run run
+    python scripts/variety_experiment.py --pilot        # 2 runs per (model x temp)
+    python scripts/variety_experiment.py                # the full run
     python scripts/variety_experiment.py --workers 2 \
         --out experiment/variety-demo
 
@@ -11,16 +11,20 @@ Child mode (internal; one child per model):
 
     python scripts/variety_experiment.py --child <out_dir> <model_index>
 
-Design (deterministic, seeded):
+Design (deterministic, seeded, temperature-swept):
 
 - **96 spec cells** = 8 pretexts x 4 tones x 3 difficulties.
 - **12 internal recipients**, rotated so every cell and every recipient is
   well covered.
-- **6 local models** (default: everything in ``ollama list``).
-- **576 base runs** — every (model, cell) pair exactly once — plus **424
-  shuffled extras** (different recipient) = **1000 campaigns** total.
+- **4 local models** (the reliable set that holds the enriched charter; see
+  ``DEFAULT_MODELS``).
+- **4 temperatures** (``TEMPERATURE_SWEEP``): 0.0 (reproducible baseline),
+  0.5, 0.8, 1.2 — every (model, cell) pair is sampled at each temperature, so
+  semantic variety is measured across the temperature axis, not only the
+  seed-derived URL.
 - Unique seed per run (1000 + run index): unique tracking tokens, and the
-  seed is recorded so any run is reproducible.
+  seed is recorded so any run is reproducible (at temp 0.0 only — temp > 0
+  breaks "same seed -> same output").
 
 Every run goes through the real ADK pipeline (``agent.driver``) and the
 post-run quality scan (``quality_agent.scan``); per-run artifacts land in
@@ -72,11 +76,33 @@ LANGUAGE = "en"
 START_AT = "2026-08-20T09:00:00Z"
 FOLLOWUP_MINUTES = 75
 
-DEFAULT_TOTAL = 1000          # campaigns per full run (576 base + extras)
-PILOT_PER_MODEL = 2           # --pilot default
+DEFAULT_TOTAL = 2000          # campaigns per full run (1920 base + 80 extras)
+PILOT_PER_MODEL = 2           # --pilot default: runs per (model x temperature)
 DESIGN_SEED = 20261026        # shuffles the extras, nothing else
 DEFAULT_RUN_TIMEOUT_S = 600   # wall clock per campaign (reasoning models)
 DEFAULT_WORKERS = 1           # model children running in parallel
+
+# Temperature sweep — the experiment varies sampling temperature per run (not a
+# single --temperature). 0.0 is the reproducible baseline; the rest trade
+# seed-reproducibility for semantic variety. See DEFAULT_MODELS below.
+TEMPERATURE_SWEEP = (0.0, 0.5, 0.8, 1.2)
+
+# The default model set for the sweep. The small 4B models are excluded because
+# they cannot hold the enriched v2 charter's 8-binding format (qwen3:4b drops
+# the persona echo on every run; llama3.2:3b collapses to the few-shot
+# example). gemma4:latest is included on request despite its 9.6 GB size.
+DEFAULT_MODELS = (
+    "qwen3:8b",
+    "llama3.1:8b",
+    "phi4-mini:latest",
+    "gemma4:latest",
+)
+
+# Per-run sampling params (the spec's ``params`` block). ``None`` temperature
+# means "adapter default" (0.0 in agent.config -> deterministic). Raise it to
+# sweep semantic variety: temp > 0 breaks "same seed -> same output".
+DEFAULT_TOP_P = None          # None -> provider default
+DEFAULT_MAX_TOKENS = None     # None -> provider default
 
 
 def utc_now() -> str:
@@ -127,34 +153,51 @@ def build_plan(
     models: list[str],
     total: int = DEFAULT_TOTAL,
     seed: int = DESIGN_SEED,
+    temperatures: tuple[float, ...] = TEMPERATURE_SWEEP,
+    top_p: float | None = None,
+    max_tokens: int | None = None,
 ) -> list[dict]:
-    """The full run list: balanced coverage of model x cell x recipient.
+    """The full run list: balanced coverage of model x cell x temperature.
 
-    Pass 1: every (model, cell) pair exactly once (``len(models) * 96`` runs).
-    Pass 2: shuffled extra (model, cell) pairs, each with a different
-    recipient than pass 1, up to ``total``.
+    Pass 1: every (model, cell) pair once at each temperature
+    (``len(models) * 96 * len(temperatures)`` runs).
+    Pass 2: shuffled extra (model, cell) pairs at the *baseline* temperature
+    (0.0), each with a different recipient than pass 1, up to ``total``.
+
+    Each run carries its own ``params`` block with the sampled temperature so
+    the sweep varies sampling semantics, not just the seed-derived URL.
     """
     cells = list(product(PRETEXTS, TONES, DIFFICULTIES))
     recipients = internal_recipient_ids()
-    base = len(models) * len(cells)
+    base = len(models) * len(cells) * len(temperatures)
     if not (base <= total <= 2 * base):
         raise SystemExit(
-            f"total must be between {base} (one run per model x cell) and "
-            f"{2 * base} (two); got {total}"
+            f"total must be between {base} (one run per model x cell x "
+            f"temperature) and {2 * base} (two); got {total}"
         )
+
+    def params_for(temp: float) -> dict:
+        p: dict = {"temperature": temp}
+        if top_p is not None:
+            p["top_p"] = top_p
+        if max_tokens is not None:
+            p["max_tokens"] = max_tokens
+        return p
 
     runs: list[dict] = []
     for mi, model in enumerate(models):
         for ci, (pretext, tone, difficulty) in enumerate(cells):
-            runs.append(
-                {
-                    "model": model,
-                    "pretext": pretext,
-                    "tone": tone,
-                    "difficulty": difficulty,
-                    "recipient_id": recipients[(ci + mi) % len(recipients)],
-                }
-            )
+            for temp in temperatures:
+                runs.append(
+                    {
+                        "model": model,
+                        "pretext": pretext,
+                        "tone": tone,
+                        "difficulty": difficulty,
+                        "recipient_id": recipients[(ci + mi) % len(recipients)],
+                        "params": params_for(temp),
+                    }
+                )
 
     rng = random.Random(seed)
     # Pass 2: extras spread evenly per model (each model gets an equal share,
@@ -185,6 +228,7 @@ def build_plan(
                 "tone": tone,
                 "difficulty": difficulty,
                 "recipient_id": recipients[(ci + mi + 1) % len(recipients)],
+                "params": params_for(temperatures[0]),  # baseline temp extras
             }
         )
 
@@ -260,6 +304,11 @@ def run_one(
         "start_at": START_AT,
         "followup_minutes": FOLLOWUP_MINUTES,
     }
+    # Per-run sampling params (temperature/top_p/max_tokens) — only when the
+    # parent set them; None keeps the adapter default (temperature 0.0).
+    params = run.get("params")
+    if params:
+        spec["params"] = params
     record = {
         "run_id": run_id,
         "model": run["model"],
@@ -275,6 +324,11 @@ def run_one(
     }
     run_dir = model_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    # Per-run LLM trace: every call's prompt/answer/usage lands in
+    # llm_trace.jsonl, which monitoring/runs_exporter.py folds into the
+    # token/latency metrics. (ADK_MODEL_TRACE_FILE was primed in run_child so
+    # the Ollama thinking shim installs before the agent imports.)
+    os.environ["ADK_MODEL_TRACE_FILE"] = str(run_dir / "llm_trace.jsonl")
 
     profile = profile_for(spec["recipient_id"], pretext=spec["pretext"])
     t0 = time.monotonic()
@@ -343,6 +397,11 @@ def run_child(out: Path, model_index: int, run_timeout: int) -> int:
     plan = json.loads((out / "plan.json").read_text(encoding="utf-8"))
     model = plan["models"][model_index]
     os.environ["ADK_MODEL"] = f"ollama/{model}"  # before agent imports
+    # Enable the LLM call trace: one JSONL per run, read by the monitoring
+    # runs-exporter (monitoring/runs_exporter.py) for token/latency metrics.
+    # Set before the agent imports so the Ollama thinking shim installs.
+    os.environ["ADK_MODEL_TRACE_FILE"] = \
+        str(out / "models" / sanitize(model) / ".llm_trace.tmp.jsonl")
 
     from agent.driver import run_pipeline_with_info
     from generator_agent.catalog import profile_for
@@ -394,16 +453,25 @@ def run_parent(
     pilot: int,
     workers: int,
     run_timeout: int,
+    temperatures: tuple[float, ...],
+    top_p: float | None = None,
+    max_tokens: int | None = None,
 ) -> int:
     out.mkdir(parents=True, exist_ok=True)
-    runs = build_plan(models, total=total)
+    runs = build_plan(
+        models, total=total,
+        temperatures=temperatures, top_p=top_p, max_tokens=max_tokens,
+    )
     if pilot:
+        # Pilot: keep ``pilot`` runs per (model, temperature) so the sweep is
+        # sampled evenly across the temperature axis, not just per model.
         kept: list[dict] = []
-        per_model: dict[str, int] = {}
+        per_model_temp: dict[tuple[str, float], int] = {}
         for run in runs:
-            if per_model.get(run["model"], 0) < pilot:
+            key = (run["model"], run["params"]["temperature"])
+            if per_model_temp.get(key, 0) < pilot:
                 kept.append(run)
-                per_model[run["model"]] = per_model.get(run["model"], 0) + 1
+                per_model_temp[key] = per_model_temp.get(key, 0) + 1
         runs = kept
 
     (out / "plan.json").write_text(
@@ -420,6 +488,9 @@ def run_parent(
                     "followup_minutes": FOLLOWUP_MINUTES,
                     "pilot": bool(pilot),
                     "design_seed": DESIGN_SEED,
+                    "temperatures": list(temperatures),
+                    "top_p": top_p,
+                    "max_tokens": max_tokens,
                 },
                 "models": models,
                 "total": len(runs),
@@ -438,7 +509,7 @@ def run_parent(
     print(f"workers: {workers} · run timeout: {run_timeout}s")
     print()
 
-    children: list[tuple[str, subprocess.Popen]] = []
+    children: list[tuple[str, subprocess.Popen, object]] = []
     try:
         for start in range(0, len(models), workers):
             batch = list(enumerate(models[start:start + workers], start=start))
@@ -462,6 +533,7 @@ def run_parent(
                     stderr=subprocess.STDOUT,
                 )
                 procs.append((model, proc, log))
+                children.append((model, proc, log))
             for model, proc, log in procs:
                 rc = proc.wait()
                 log.close()
@@ -497,17 +569,27 @@ def main() -> None:
     )
     parser.add_argument("--pilot", nargs="?", const=PILOT_PER_MODEL, type=int,
                         metavar="N",
-                        help=f"run only N campaigns per model (default {PILOT_PER_MODEL})")
+                        help=f"run only N campaigns per (model x temperature) "
+                             f"(default {PILOT_PER_MODEL})")
     parser.add_argument("--out", default=None,
                         help="output directory (default: experiment/variety-<ts>)")
     parser.add_argument("--models",
-                        help="comma-separated model list (default: `ollama list`)")
+                        help="comma-separated model list (default: the default"
+                             " capacity-matched set; omit to use it)")
     parser.add_argument("--runs", type=int, default=DEFAULT_TOTAL,
                         help=f"total campaigns (default {DEFAULT_TOTAL})")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
                         help="model children running in parallel")
     parser.add_argument("--run-timeout", type=int, default=DEFAULT_RUN_TIMEOUT_S,
                         help="wall-clock seconds per campaign")
+    parser.add_argument("--temperatures", default=None,
+                        help="comma-separated temperature sweep "
+                             f"(default: {','.join(map(str, TEMPERATURE_SWEEP))})")
+    parser.add_argument("--top-p", dest="top_p", type=float, default=DEFAULT_TOP_P,
+                        help="nucleus top-p (default: provider default)")
+    parser.add_argument("--max-tokens", dest="max_tokens", type=int,
+                        default=DEFAULT_MAX_TOKENS,
+                        help="max output tokens (default: provider default)")
     args = parser.parse_args()
 
     if args.child:
@@ -516,10 +598,18 @@ def main() -> None:
             run_child(out, int(args.child[1]), args.run_timeout)
         )
 
+    temperatures = (
+        tuple(float(t) for t in args.temperatures.split(",") if t.strip())
+        if args.temperatures
+        else TEMPERATURE_SWEEP
+    )
+    if not temperatures:
+        raise SystemExit("empty temperature sweep")
+
     models = (
         [m.strip() for m in args.models.split(",") if m.strip()]
         if args.models
-        else ollama_models()
+        else list(DEFAULT_MODELS)
     )
     if not models:
         raise SystemExit("no models found — is the Ollama daemon running?")
@@ -530,7 +620,7 @@ def main() -> None:
     )
     raise SystemExit(
         run_parent(out, models, args.runs, args.pilot, args.workers,
-                   args.run_timeout)
+                   args.run_timeout, temperatures, args.top_p, args.max_tokens)
     )
 
 

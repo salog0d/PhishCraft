@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import matplotlib
@@ -106,6 +108,61 @@ def load_records(out: Path) -> tuple[list[dict], dict]:
 # Aggregation
 # --------------------------------------------------------------------------- #
 
+_URL = re.compile(r"https?://[^\s]+")
+
+
+def _norm_prose(text: str) -> str:
+    """Lowercase + strip URLs/punctuation so seed-derived tokens don't mask
+    semantic duplicates (two runs whose only difference is the tracking URL
+    count as the *same* message for variety purposes)."""
+    text = _URL.sub(" ", text)
+    text = re.sub(r"[^a-z0-9 ]", " ", text.lower())
+    return " ".join(text.split())
+
+
+def _prose_for(out: Path, rec: dict) -> str | None:
+    """The concatenated (subject + body) prose of a run, normalized; None when
+    the artifact is missing (failed/timeout runs)."""
+    if not rec.get("dir"):
+        return None
+    path = out / rec["dir"] / "generated_campaign.json"
+    if not path.exists():
+        return None
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    parts = []
+    for m in obj.get("messages", []):
+        if m.get("subject"):
+            parts.append(m["subject"])
+        if m.get("body"):
+            parts.append(m["body"])
+    return _norm_prose(" ".join(parts))
+
+
+def _variety(prose_list: list[str]) -> dict:
+    """Variety metrics over a list of prose blobs: unique ratio and the
+    near-duplicate (>=0.85 similarity) pair rate."""
+    nonempty = [p for p in prose_list if p]
+    n = len(nonempty)
+    if n == 0:
+        return {"n": 0, "unique_ratio": None, "near_dup_rate": None}
+    unique = len(set(nonempty))
+    near = 0
+    pairs = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            pairs += 1
+            if SequenceMatcher(None, nonempty[i], nonempty[j]).ratio() >= 0.85:
+                near += 1
+    return {
+        "n": n,
+        "unique_ratio": round(unique / n, 4),
+        "near_dup_rate": round(near / pairs, 4) if pairs else None,
+    }
+
+
 def aggregate(out: Path, records: list[dict]) -> dict:
     ok = [r for r in records if r["status"] == "ok"]
 
@@ -126,10 +183,17 @@ def aggregate(out: Path, records: list[dict]) -> dict:
             "n_attempts": [], "refined": 0, "raw_violations": [],
         }
     )
+    # Temperature axis: retry/flag/attempt/refinement stats per temperature,
+    # plus the variety metrics read back from the delivered prose.
+    per_temp = defaultdict(
+        lambda: {"n": 0, "flagged": 0, "attempts": [], "refined": 0,
+                 "prose": []}
+    )
     for r in ok:
         spec = r.get("spec", {})
         q = r.get("quality") or {}
         counts = r.get("quality_counts") or {}
+        temp = (r.get("spec", {}).get("params", {}) or {}).get("temperature")
         per_model[r["model"]]["n"] += 1
         per_model[r["model"]]["durations"].append(r.get("duration_ms") or 0)
         per_model[r["model"]]["n_attempts"].append(
@@ -157,9 +221,27 @@ def aggregate(out: Path, records: list[dict]) -> dict:
             finding_counts[check] += count
             if count:
                 flag_counts[check] += 1
+        # Temperature axis accumulation.
+        if temp is not None:
+            bt = per_temp[temp]
+            bt["n"] += 1
+            bt["attempts"].append(
+                (r.get("run_info") or {}).get("n_attempts", 0) or 0
+            )
+            if (r.get("run_info") or {}).get("refined"):
+                bt["refined"] += 1
+            if q.get("any_flag"):
+                bt["flagged"] += 1
+            prose = _prose_for(out, r)
+            if prose:
+                bt["prose"].append(prose)
 
     n_ok = len(ok)
     rate = lambda n: round(n / n_ok, 4) if n_ok else None  # noqa: E731
+
+    def group_rate(count: int, base: int) -> float | None:
+        """Rate over one group (model / pretext), not the whole run."""
+        return round(count / base, 4) if base else None
 
     # Contamination.
     contamination_counts = Counter(
@@ -226,12 +308,12 @@ def aggregate(out: Path, records: list[dict]) -> dict:
                 round(sum(s["durations"]) / len(s["durations"]))
                 if s["durations"] else None
             ),
-            "quality_flag_rate": rate(s["flagged"]),
-            "contamination_rate": rate(s["contaminated"]),
-            "label_correction_rate": rate(s["label_mismatch"]),
-            "coherence_failure_rate": rate(s["coherence_fail"]),
-            "strip_affected_rate": rate(s["strip_affected"]),
-            "refinement_rate": rate(s["refined"]),
+            "quality_flag_rate": group_rate(s["flagged"], s["n"]),
+            "contamination_rate": group_rate(s["contaminated"], s["n"]),
+            "label_correction_rate": group_rate(s["label_mismatch"], s["n"]),
+            "coherence_failure_rate": group_rate(s["coherence_fail"], s["n"]),
+            "strip_affected_rate": group_rate(s["strip_affected"], s["n"]),
+            "refinement_rate": group_rate(s["refined"], s["n"]),
             "mean_attempts": (
                 round(sum(s["n_attempts"]) / len(s["n_attempts"]), 2)
                 if s["n_attempts"] else None
@@ -242,6 +324,23 @@ def aggregate(out: Path, records: list[dict]) -> dict:
             ),
         }
         for m, s in per_model.items()
+    }
+
+    per_temperature_out = {
+        str(t): {
+            "n": s["n"],
+            "mean_attempts": (
+                round(sum(s["attempts"]) / len(s["attempts"]), 2)
+                if s["attempts"] else None
+            ),
+            "retry_rate": group_rate(
+                sum(1 for a in s["attempts"] if a > 1), s["n"]
+            ),
+            "quality_flag_rate": group_rate(s["flagged"], s["n"]),
+            "refinement_rate": group_rate(s["refined"], s["n"]),
+            **_variety(s["prose"]),
+        }
+        for t, s in per_temp.items()
     }
 
     payload = {
@@ -264,7 +363,7 @@ def aggregate(out: Path, records: list[dict]) -> dict:
         },
         "flag_counts": {c: flag_counts.get(c, 0) for c in QUALITY_CHECKS},
         "per_pretext": {
-            p: {**s, "rate": rate(s["flagged"])}
+            p: {**s, "rate": group_rate(s["flagged"], s["n"])}
             for p, s in sorted(per_pretext.items())
         },
         # Contamination.
@@ -281,7 +380,7 @@ def aggregate(out: Path, records: list[dict]) -> dict:
             p: {
                 "n": s["n"],
                 "contaminated": s["contaminated"],
-                "rate": rate(s["contaminated"]),
+                "rate": group_rate(s["contaminated"], s["n"]),
             }
             for p, s in sorted(per_pretext_contamination.items())
         },
@@ -319,6 +418,8 @@ def aggregate(out: Path, records: list[dict]) -> dict:
         "refinement": refinement,
         # Per model.
         "per_model": per_model_out,
+        # Per temperature (the sweep axis): variety / retry / flag rate.
+        "per_temperature": per_temperature_out,
     }
     return payload
 
@@ -542,6 +643,53 @@ def chart_strip(payload: dict, charts: Path, cmap: dict) -> None:
     plt.close(fig)
 
 
+def chart_temperature(payload: dict, charts: Path) -> None:
+    """The temperature sweep axis: semantic variety, retry rate, refinement
+    rate, and quality flag rate as a function of sampling temperature."""
+    pt = payload["per_temperature"]
+    if not pt:
+        return
+    temps = sorted(pt, key=float)
+    unique = [pt[t]["unique_ratio"] or 0 for t in temps]
+    near_dup = [pt[t]["near_dup_rate"] or 0 for t in temps]
+    retry = [pt[t]["retry_rate"] or 0 for t in temps]
+    flag = [pt[t]["quality_flag_rate"] or 0 for t in temps]
+    refine = [pt[t]["refinement_rate"] or 0 for t in temps]
+
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+    axes[0].plot(temps, unique, marker="o", color="#4C72B0", label="unique")
+    axes[0].plot(temps, near_dup, marker="s", color="#C44E52",
+                 label="near-duplicate")
+    axes[0].set_title("Semantic variety vs temperature")
+    axes[0].set_xlabel("temperature")
+    axes[0].set_ylabel("ratio")
+    axes[0].set_ylim(0, 1.05)
+    axes[0].legend(frameon=False, fontsize=8)
+
+    axes[1].plot(temps, retry, marker="o", color="#DD8452")
+    axes[1].set_title("Rejection-sampling retry rate")
+    axes[1].set_xlabel("temperature")
+    axes[1].set_ylabel("runs needing retry")
+
+    axes[2].plot(temps, refine, marker="o", color="#8172B3")
+    axes[2].set_title("Self-refinement rate (critic)")
+    axes[2].set_xlabel("temperature")
+    axes[2].set_ylabel("runs refined")
+
+    axes[3].plot(temps, flag, marker="o", color="#55A868")
+    axes[3].set_title("Quality flag rate")
+    axes[3].set_xlabel("temperature")
+    axes[3].set_ylabel("rate")
+
+    for ax in axes:
+        _style_axes(ax)
+    fig.suptitle("Temperature sweep — variety, refinement, and robustness "
+                 f"({payload['n_ok']} campaigns)", fontsize=12)
+    fig.tight_layout()
+    fig.savefig(charts / "temperature_sweep.png", dpi=150)
+    plt.close(fig)
+
+
 def render_charts(out: Path, payload: dict, records: list[dict]) -> list[Path]:
     charts = out / "charts"
     charts.mkdir(parents=True, exist_ok=True)
@@ -556,6 +704,7 @@ def render_charts(out: Path, payload: dict, records: list[dict]) -> list[Path]:
     chart_durations(payload, charts, records, cmap)
     chart_cumulative(payload, charts, records)
     chart_strip(payload, charts, cmap)
+    chart_temperature(payload, charts)
     return sorted(charts.glob("*.png"))
 
 
@@ -637,6 +786,20 @@ def render_summary(out: Path, payload: dict, charts: list[Path]) -> None:
             f"{s['contamination_rate']} | {s['label_correction_rate']} | "
             f"{s['coherence_failure_rate']} | "
             f"{(s['duration_ms_median'] or 0) / 1000:.1f}s |"
+        )
+    lines += [
+        "",
+        "## Per temperature (sweep)",
+        "",
+        "| temperature | runs | unique-body ratio | near-dup rate | "
+        "retry rate | refinement rate | quality flag rate | mean attempts |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for t, s in payload["per_temperature"].items():
+        lines.append(
+            f"| `{t}` | {s['n']} | {s['unique_ratio']} | {s['near_dup_rate']} | "
+            f"{s['retry_rate']} | {s['refinement_rate']} | "
+            f"{s['quality_flag_rate']} | {s['mean_attempts']} |"
         )
     lines += [
         "",
