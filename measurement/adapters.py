@@ -76,6 +76,8 @@ class StubAdapter:
             ).astimezone(timezone.utc),
             scheduled=(spec["start_at"], spec["start_at"]),
             persona_override=profile.get("persona"),
+            seed=spec.get("seed"),
+            generation_params=spec.get("params"),
         )
         return campaign, validate_campaign(campaign)
 

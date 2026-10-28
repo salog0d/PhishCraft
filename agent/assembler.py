@@ -46,6 +46,17 @@ def parse_bindings(text: str) -> dict[str, str]:
                 f"binding {key} echoed a prompt placeholder instead of a value: "
                 f"{value!r}"
             )
+    # Some models (qwen3:4b especially) embed literal ``\n`` (backslash-n) into
+    # a body when they write it to a single escaped line. Unescape so the
+    # delivered artifact carries real line breaks, not backslash-n text a
+    # recipient would see verbatim. Applied to every binding: only the two body
+    # bindings ever contain prose with line breaks, and unescaping the others
+    # is a no-op.
+    for key in bindings:
+        value = bindings[key]
+        value = value.replace("\\n", "\n").replace("\\t", "\t")
+        value = value.replace("\\\\", "\\")
+        bindings[key] = value
     return bindings
 
 
@@ -80,6 +91,10 @@ class AssemblerAgent(BaseAgent):
             language=spec.get("language", "en"),
             # deterministic persona (pretext x recipient), not the model echo
             persona_override=profile.get("persona"),
+            # unique per-run seed -> unique tracking token per campaign
+            seed=spec.get("seed"),
+            # per-run sampling params (temperature/top_p/max_tokens) -> provenance
+            generation_params=spec.get("params"),
         )
         yield Event(
             author=self.name,

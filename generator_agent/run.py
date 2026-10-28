@@ -44,6 +44,12 @@ def main() -> None:
     parser.add_argument("--difficulty", default="medium")
     parser.add_argument("--language", default="en")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--temperature", type=float, default=None,
+                        help="sampling temperature (default: adapter default 0.0)")
+    parser.add_argument("--top-p", dest="top_p", type=float, default=None,
+                        help="nucleus top-p (default: provider default)")
+    parser.add_argument("--max-tokens", dest="max_tokens", type=int, default=None,
+                        help="max output tokens (default: provider default)")
     parser.add_argument("--start-at", default="2026-08-20T09:00:00Z")
     parser.add_argument("--followup-minutes", type=int, default=75)
     parser.add_argument("--model", help="e.g. deepseek/deepseek-chat (env ADK_MODEL)")
@@ -76,12 +82,22 @@ def main() -> None:
         "start_at": args.start_at,
         "followup_minutes": args.followup_minutes,
     }
+    params = {
+        k: v for k, v in (
+            ("temperature", args.temperature),
+            ("top_p", args.top_p),
+            ("max_tokens", args.max_tokens),
+        ) if v is not None
+    } or None
+    if params:
+        spec["params"] = params
 
     print(
         f"pipeline: campaign={mission['campaign_id']} "
         f"recipient={profile['recipient']['full_name']} "
         f"pretext={args.pretext} tone={args.tone} difficulty={args.difficulty} "
         f"seed={args.seed}"
+        f"{f' temperature={args.temperature}' if args.temperature is not None else ''}"
     )
     campaign, report = run_pipeline(spec, mission, profile)
 
