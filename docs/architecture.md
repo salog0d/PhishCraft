@@ -100,22 +100,30 @@ pipeline measurable for reproducibility.
   never writes URLs or tracking tokens (the token is seed-derived and
   unguessable), it writes the placeholder and the assembler substitutes the
   real landing URL.
+- **Seed-derived variation axes**: the seed reshapes the instruction, not just
+  the tracking token. `variation_axes(seed)` derives an opener style, body
+  structure, urgency style, a word budget, and an SMS angle, injected into the
+  user message so two seeds provably produce different generation constraints.
+- **Per-run generation params**: the spec's `params` block
+  (`temperature`/`top_p`/`max_tokens`) is turned into a `GenerateContentConfig`
+  by `agent.pipeline.build_pipeline`, so sampling behaviour is a per-run axis
+  (temperature > 0 trades seed-reproducibility for semantic variety).
 - The deterministic assembler parses the bindings and constructs the
   `GeneratedCampaign` (email + SMS follow-up) with provenance, stamping the
   selected persona into the campaign and every sender.
 
 ### Phase 1.5 — Self-refinement (driver-level loop, `agent/driver.py`)
-- After a campaign parses, the driver counts its `link_fixes` (stale tokens
-  the LLM wrote despite the convention). If any exist, it re-runs the pipeline
-  with a **critique** built from those fixes — what was written vs. the
-  correct token, plus a restatement of the placeholder rule — up to
-  `REFINE_EXTRA_ATTEMPTS` rounds.
-- Reflexion-style, but the critic is the deterministic validator's own
-  evidence: no critic LLM, no victim feedback. Only subject/body text is
-  regenerated; the deterministic layer is never touched, so reproducibility
-  is preserved. The critique is a runtime prompt amendment (like
+- After a campaign parses, the driver runs the quality scan; if the campaign
+  has a structural problem — stale link tokens (`link_fixes`), a coherence
+  failure, or a stage-direction / meta-bleed finding — it re-runs the pipeline
+  with a **critique** up to `REFINE_EXTRA_ATTEMPTS` rounds.
+- Reflexion-style, driven by a **critic LLM** (`agent/critic.py`): the critic
+  model (default `ollama/deepseek-r1:7b`, overridable via `ADK_CRITIC_MODEL`)
+  reads the deterministic findings and writes a short corrective instruction.
+  Stale link tokens still fall back to the deterministic
+  `build_refinement`. The critique is a runtime prompt amendment (like
   `STRICT_FORMAT`): the provenance `prompt_hash` still records the base
-  rendered prompt.
+  rendered prompt, and only subject/body text is regenerated.
 
 ### Phase 2 — Verification (`validator_agent`)
 - The deterministic validator runs the five coherence checks and emits a

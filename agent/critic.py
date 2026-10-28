@@ -1,0 +1,108 @@
+"""Self-refinement critic: an LLM that turns structural findings into a fix list.
+
+The deterministic validator and quality scanner know *exactly* what is wrong
+(the coherence failures and the stage-direction / meta-bleed findings). This
+module hands that evidence to a critic LLM, which writes a *general* critique
+the content agent can follow to regenerate the subject/body — the Reflexion
+loop's "self-critique" step, without a hand-written heuristic per failure mode.
+
+The critique is evidence-driven, never a repair: it is *appended to the next
+generation prompt* so the model re-aims; the deterministic layer (persona,
+tokens, schedule, provenance) is never touched.
+"""
+
+from __future__ import annotations
+
+from google.adk.models import LlmRequest
+from google.genai import types
+
+from agent.config import resolve_critic_model
+
+# The structural quality checks worth feeding back (everything else — label
+# audit, contamination, strip stats — is evidence the scanner records but the
+# content agent cannot meaningfully re-aim at from a critique).
+STRUCTURAL_CHECKS = ("stage_direction", "meta_bleed")
+
+_CRITIQUE_SYSTEM = (
+    "You are the critic in a Reflexion loop for a phishing-simulation campaign "
+    "generator. You receive the structural problems a deterministic validator "
+    "found in a generated email/SMS campaign. Write ONLY a short critique that "
+    "tells the content generator what to fix and why, so it can rewrite the "
+    "subject and bodies correctly. Never invent new problems, never suggest new "
+    "content, never write a URL or tracking token. Keep it under 5 sentences."
+)
+
+
+def findings_summary(campaign, report, quality) -> list[str]:
+    """The structural problems to feed the critic, one line each.
+
+    Coherence (validator) failures get their ``detail``; the quality scan's
+    stage-direction and meta-bleed findings get their per-field evidence.
+    Returns [] when nothing structural is wrong (so no critique runs).
+    """
+    problems: list[str] = []
+
+    for result in report.results:
+        if not result.passed:
+            problems.append(f"[coherence:{result.check.value}] {result.detail}")
+
+    if quality is not None:
+        for result in quality.results:
+            if result.check not in STRUCTURAL_CHECKS or result.passed:
+                continue
+            for finding in result.findings:
+                loc = f"{finding.field}: {finding.detail}"
+                if finding.excerpt:
+                    loc += f" (e.g. {finding.excerpt!r})"
+                problems.append(f"[{result.check}] {loc}")
+
+    return problems
+
+
+def _critique_prompt(problems: list[str]) -> str:
+    listing = "\n".join(f"- {p}" for p in problems)
+    return (
+        f"The generated campaign has these structural problems:\n{listing}\n\n"
+        "Write the critique directly to the content generator: what to remove "
+        "(stage directions, meta commentary), what to keep, and the one rule it "
+        "must re-read about never writing URLs or bracket placeholders."
+    )
+
+
+async def critique_campaign(campaign, report, quality) -> str | None:
+    """Run the critic LLM; returns the critique text, or None when nothing to fix.
+
+    The campaign is passed only so the critic can reference it if needed; it is
+    never mutated. On any error the critic is skipped (the deterministic
+    backstop — assembler normalization — still holds).
+    """
+    problems = findings_summary(campaign, report, quality)
+    if not problems:
+        return None
+    model = resolve_critic_model()
+    try:
+        request = LlmRequest(
+            model=getattr(model, "model", None),
+            contents=[
+                types.Content(
+                    role="user",
+                    parts=[types.Part(text=_critique_prompt(problems))],
+                )
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=_CRITIQUE_SYSTEM, temperature=0.0
+            ),
+        )
+        # generate_content_async is an async generator even when stream=False:
+        # collect every yielded response and read the final content. Reasoning
+        # models (deepseek-r1) split their thinking into ``thought=True`` parts;
+        # keep only the answer — the critique must not carry the preamble.
+        text = ""
+        async for response in model.generate_content_async(llm_request=request):
+            content = getattr(response, "content", None)
+            for part in getattr(content, "parts", None) or []:
+                if getattr(part, "text", None) and not getattr(part, "thought", False):
+                    text += part.text
+    except Exception:
+        return None  # never break the pipeline over critique bookkeeping
+    return text.strip() or None

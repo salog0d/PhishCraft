@@ -25,13 +25,24 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from agent.pipeline import root_agent
+from agent.pipeline import build_pipeline
 from app.core.schemas import CoherenceReport, GeneratedCampaign
+
+try:
+    from monitoring import metrics
+except ImportError:  # pragma: no cover — metrics are optional
+    metrics = None
+
+try:
+    from agent.critic import critique_campaign
+except ImportError:  # pragma: no cover — critic is optional
+    critique_campaign = None
 
 APP_NAME = "campaign-pipeline"
 USER_ID = "operator"
@@ -61,6 +72,25 @@ def raw_link_violations(campaign: GeneratedCampaign) -> int:
     signal must come from ``link_fixes``, not from the CoherenceReport.
     """
     return sum(len(m.link_fixes) for m in campaign.messages)
+
+
+def _structural_issues(campaign: GeneratedCampaign, report, spec: dict):
+    """(has_structural_problem, quality) for one parsed campaign.
+
+    ``has_structural_problem`` is True when the campaign has a coherence
+    (validator) failure or a stage-direction / meta-bleed quality finding — the
+    signal the critic should feed back. Returns the quality scan result too, so
+    the caller hands it straight to the critic.
+    """
+    from quality_agent.scan import scan_campaign
+
+    quality = scan_campaign(campaign, spec=spec)
+    coherence_fail = any(not r.passed for r in report.results)
+    structural = any(
+        r.check in ("stage_direction", "meta_bleed") and not r.passed
+        for r in quality.results
+    )
+    return (coherence_fail or structural), quality
 
 
 def build_refinement(campaign: GeneratedCampaign) -> str:
@@ -108,6 +138,7 @@ def render_user_message(spec: dict, mission: dict, profile: dict) -> str:
         spec["tone"],
         spec["difficulty"],
         language=spec.get("language", "en"),
+        seed=spec.get("seed"),
     )
 
 
@@ -125,7 +156,11 @@ async def _attempt(
             "profile": json.dumps(profile),
         },
     )
-    runner = Runner(agent=root_agent, app_name=APP_NAME, session_service=svc)
+    runner = Runner(
+        agent=build_pipeline(spec.get("params")),
+        app_name=APP_NAME,
+        session_service=svc,
+    )
     message = render_user_message(spec, mission, profile)
     if refinement:
         message += refinement
@@ -179,8 +214,11 @@ async def _run_async(
             f"no valid campaign after {MAX_ATTEMPTS} attempts: {last_error}"
         )
 
-    # Phase 2 — self-refinement: a campaign that parses but carries stale
-    # link tokens is regenerated with the critique from build_refinement.
+    # Phase 2 — self-refinement (Reflexion-style): a campaign that parses but
+    # still has a structural problem — stale link tokens, a coherence failure,
+    # or a stage-direction / meta-bleed quality finding — is regenerated with a
+    # critique. Link tokens use the deterministic build_refinement; structural
+    # findings go through the critic LLM when it is available.
     # The first-attempt violation count is kept for the reliability metric.
     info = {
         "n_attempts": attempts,
@@ -188,11 +226,22 @@ async def _run_async(
         "first_attempt_raw_link_violations": raw_link_violations(campaign),
     }
     for _ in range(REFINE_EXTRA_ATTEMPTS):
-        if raw_link_violations(campaign) == 0:
+        structural, quality = _structural_issues(campaign, report, spec)
+        needs_refine = raw_link_violations(campaign) > 0 or structural
+        if not needs_refine:
             break
         info["refined"] = True
         info["n_attempts"] += 1
-        critique = build_refinement(campaign)
+        # Build the critique: critic LLM for structural findings, the
+        # deterministic link-critique as the (only) fallback for stale tokens.
+        critique = None
+        if critique_campaign is not None and structural:
+            critique = await critique_campaign(campaign, report, quality)
+        if critique is None and raw_link_violations(campaign) > 0:
+            critique = build_refinement(campaign)
+        if not critique:
+            # Nothing the content agent can re-aim at -> stop refining.
+            break
         try:
             campaign, report = await _attempt(
                 spec, mission, profile, strict=True, refinement=critique
@@ -208,11 +257,37 @@ async def _run_async(
     return campaign, report, info
 
 
+def _timed_run(
+    spec: dict, mission: dict, profile: dict | None
+) -> tuple[GeneratedCampaign, CoherenceReport, dict]:
+    """Run the pipeline once, recording the process metrics around it."""
+    model = spec.get("model") or {}
+    model_name = model.get("name", "unknown") if isinstance(model, dict) else str(model)
+    t0 = time.monotonic()
+    status = "ok"
+    info: dict = {}
+    try:
+        campaign, report, info = asyncio.run(_run_async(spec, mission, profile))
+    except Exception:
+        status = "generation_error"
+        raise
+    finally:
+        if metrics is not None:
+            metrics.record_pipeline_run(
+                model=metrics.normalize_model(model_name),
+                status=status,
+                duration_s=time.monotonic() - t0,
+                n_attempts=int(info.get("n_attempts", 0) or 0),
+                refined=bool(info.get("refined")),
+            )
+    return campaign, report, info
+
+
 def run_pipeline(
     spec: dict, mission: dict, profile: dict | None = None
 ) -> tuple[GeneratedCampaign, CoherenceReport]:
     """Synchronous wrapper: one spec -> (campaign, report)."""
-    campaign, report, _info = asyncio.run(_run_async(spec, mission, profile))
+    campaign, report, _info = _timed_run(spec, mission, profile)
     return campaign, report
 
 
@@ -225,4 +300,4 @@ def run_pipeline_with_info(
     reports: ``n_attempts``, ``refined`` (whether any refinement round ran),
     and ``first_attempt_raw_link_violations`` (the pre-refinement raw metric).
     """
-    return asyncio.run(_run_async(spec, mission, profile))
+    return _timed_run(spec, mission, profile)
