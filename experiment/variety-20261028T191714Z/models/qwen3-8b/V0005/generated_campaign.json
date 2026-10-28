@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "Northwind Supplies — Accounts Payable",
+    "email": "ap@northwind-supplies.example",
+    "role": null,
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "gregory.whitfield@fantazylabz.tech",
+    "full_name": "Gregory Whitfield",
+    "role": "Director of Finance",
+    "department": "Finance"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "Northwind Supplies — Accounts Payable",
+        "from_address": "ap@northwind-supplies.example",
+        "impersonated_brand": null
+      },
+      "subject": "Q3 Invoice Status Update",
+      "body": "Your invoice for Q3 supplies is now ready for review. A team member from procurement has already confirmed the line items. Please verify the details before the close of business.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/4f12f04c1409",
+        "button_label": "View Invoice"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "qwen3:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.0,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1005
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "e793bd26c27d902649a8615f92fae17ad5b333506041a787d42e61866d4ccf7c",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "Northwind Supplies — Accounts Payable",
+        "from_address": "ap@northwind-supplies.example",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Switching to SMS for faster confirmation — the invoice was updated with a new tax code. Verify via https://sim.fantazylabz.tech/t/4f12f04c1409 to avoid processing delays.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/4f12f04c1409",
+        "button_label": "View Invoice"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "qwen3:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.0,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1005
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "e793bd26c27d902649a8615f92fae17ad5b333506041a787d42e61866d4ccf7c",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

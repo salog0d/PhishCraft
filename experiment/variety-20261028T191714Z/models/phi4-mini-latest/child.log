@@ -1,0 +1,26 @@
+[child] model=phi4-mini:latest runs=16 (skipped 32 already ok)
+[V0033] ok flags=2 mismatch=[] 217.8s (eta 54m)
+[V0034] ok flags=1 mismatch=['difficulty'] 210.2s (eta 50m)
+[V0035] ok flags=2 mismatch=['tone', 'difficulty'] 217.4s (eta 47m)
+attempt 1/3 produced no valid campaign (ValueError: bindings missing 'body'); retrying
+attempt 2/3 produced no valid campaign (ValueError: bindings missing 'display name'); retrying
+[V0036] ok flags=1 mismatch=[] 297.4s (eta 47m)
+[V0037] ok flags=1 mismatch=['tone'] 196.2s (eta 42m)
+[V0038] ok flags=1 mismatch=['tone', 'difficulty'] 274.4s (eta 39m)
+refinement produced no valid campaign (ValidationError: 1 validation error for GeneratedCampaign
+messages.1.body
+  String should have at least 1 character [type=string_too_short, input_value='', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_too_short); keeping the previous attempt
+[V0039] ok flags=2 mismatch=['difficulty'] 305.0s (eta 37m)
+[V0040] ok flags=1 mismatch=['difficulty'] 51.4s (eta 29m)
+14:08:52 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0041] ok flags=2 mismatch=['tone'] 196.5s (eta 25m)
+[V0042] ok flags=2 mismatch=['tone', 'difficulty'] 29.9s (eta 20m)
+[V0043] ok flags=1 mismatch=['pretext'] 27.4s (eta 15m)
+[V0044] ok flags=0 mismatch=['tone', 'difficulty'] 1.8s (eta 11m)
+14:12:12 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0045] ok flags=3 mismatch=['pretext', 'difficulty'] 29.4s (eta 8m)
+[V0046] ok flags=3 mismatch=['tone'] 26.2s (eta 5m)
+[V0047] ok flags=0 mismatch=['pretext'] 26.8s (eta 2m)
+[V0048] ok flags=3 mismatch=['pretext'] 26.2s (eta 0m)
+[child] phi4-mini:latest: 16 runs in 35.6m

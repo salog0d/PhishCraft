@@ -1,0 +1,13 @@
+[child] model=qwen3:8b runs=8 (skipped 0 already ok)
+[V0001] ok flags=0 mismatch=['difficulty'] 103.7s (eta 12m)
+[V0002] ok flags=0 mismatch=['difficulty'] 90.6s (eta 10m)
+[V0003] ok flags=1 mismatch=['tone'] 36.3s (eta 6m)
+12:22:01 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0004] ok flags=0 mismatch=['difficulty'] 40.9s (eta 5m)
+12:22:27 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 2 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0005] ok flags=0 mismatch=[] 58.0s (eta 3m)
+[V0006] ok flags=1 mismatch=['difficulty'] 100.8s (eta 2m)
+[V0007] ok flags=0 mismatch=[] 22.1s (eta 1m)
+12:25:17 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0008] ok flags=0 mismatch=['difficulty'] 15.4s (eta 0m)
+[child] qwen3:8b: 8 runs in 7.8m

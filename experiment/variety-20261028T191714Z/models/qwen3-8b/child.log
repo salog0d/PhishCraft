@@ -1,0 +1,25 @@
+[child] model=qwen3:8b runs=16 (skipped 0 already ok)
+[V0001] ok flags=0 mismatch=[] 17.7s (eta 4m)
+13:18:09 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0002] ok flags=0 mismatch=['difficulty'] 32.8s (eta 6m)
+13:18:36 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 2 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0003] ok flags=0 mismatch=[] 26.2s (eta 6m)
+13:19:10 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 3 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0004] ok flags=0 mismatch=['tone', 'difficulty'] 33.9s (eta 6m)
+13:19:28 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 4 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0005] ok flags=0 mismatch=['tone', 'difficulty'] 18.6s (eta 5m)
+13:19:52 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 5 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0006] ok flags=2 mismatch=['difficulty'] 106.9s (eta 7m)
+[V0007] ok flags=3 mismatch=['difficulty'] 166.5s (eta 9m)
+[V0008] ok flags=0 mismatch=[] 177.9s (eta 10m)
+[V0009] ok flags=0 mismatch=['tone', 'difficulty'] 105.9s (eta 9m)
+[V0010] ok flags=0 mismatch=[] 114.1s (eta 8m)
+[V0011] ok flags=2 mismatch=['tone', 'difficulty'] 131.3s (eta 7m)
+[V0012] ok flags=0 mismatch=['difficulty'] 82.8s (eta 6m)
+[V0013] ok flags=0 mismatch=['tone', 'difficulty'] 29.0s (eta 4m)
+13:35:15 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0014] ok flags=1 mismatch=['difficulty'] 31.9s (eta 3m)
+13:35:35 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 2 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0015] ok flags=0 mismatch=['tone', 'difficulty'] 99.7s (eta 1m)
+[V0016] ok flags=2 mismatch=['tone', 'difficulty'] 84.0s (eta 0m)
+[child] qwen3:8b: 16 runs in 21.0m

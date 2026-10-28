@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "Sofia Reyes",
+    "email": "sofia.reyes@fantazylabz.tech",
+    "role": "Chief Financial Officer",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "hannah.fischer@fantazylabz.tech",
+    "full_name": "Hannah Fischer",
+    "role": "Director of People Operations",
+    "department": "Human Resources"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "Sofia Reyes",
+        "from_address": "sofia.reyes@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Urgent: Q3 budget review deadline",
+      "body": "Hannah,",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/1b065a62278c",
+        "button_label": "Review Summary"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.5,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1026
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "8f5a8578f58e777737c6625b37117693768d5a586502805263df2b37fb9fa589",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "Sofia Reyes",
+        "from_address": "sofia.reyes@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Review complete — new item added to the Q3 budget review. Sign off via https://sim.fantazylabz.tech/t/1b065a62278c before 17:00.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/1b065a62278c",
+        "button_label": "Review Summary"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.5,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1026
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "8f5a8578f58e777737c6625b37117693768d5a586502805263df2b37fb9fa589",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

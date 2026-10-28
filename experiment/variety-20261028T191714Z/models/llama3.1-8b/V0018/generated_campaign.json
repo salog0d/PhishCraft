@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "gregory.whitfield@fantazylabz.tech",
+    "full_name": "Gregory Whitfield",
+    "role": "Director of Finance",
+    "department": "Finance"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Urgent: Password reset required before 24 hours",
+      "body": "Good morning Gregory,",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/7f9f760544e0",
+        "button_label": "Reset Password"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.5,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1018
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "7f21b78abd92a0d8d94c1cf4e887420e400ef67a1da823c6031297ef637f4a95",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Account lockout imminent. Update your password now via https://sim.fantazylabz.tech/t/7f9f760544e0.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/7f9f760544e0",
+        "button_label": "Reset Password"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.5,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1018
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "7f21b78abd92a0d8d94c1cf4e887420e400ef67a1da823c6031297ef637f4a95",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

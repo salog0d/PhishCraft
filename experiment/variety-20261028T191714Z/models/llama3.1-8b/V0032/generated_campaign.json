@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "rajesh.kapoor@fantazylabz.tech",
+    "full_name": "Rajesh Kapoor",
+    "role": "Chief Technology Officer",
+    "department": "Engineering"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Your team is already ahead of the pack on SSO security",
+      "body": "Good morning Rajesh Kapoor,",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/c4c16222583e",
+        "button_label": "Open Helpdesk"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 1.2,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1032
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "0a849051831a287c2e9e20cc9336c3b751012056b7598f5a1a8314664438087d",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Portal sync complete — new SSO threat detected yesterday, awaiting review.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/c4c16222583e",
+        "button_label": "Open Helpdesk"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 1.2,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1032
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "0a849051831a287c2e9e20cc9336c3b751012056b7598f5a1a8314664438087d",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "spec_id": "V0011",
+  "pretext": "executive_request",
+  "results": [
+    {
+      "check": "dialogue_collapse",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "stage_direction",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "turn_overflow",
+      "passed": false,
+      "count": 1,
+      "findings": [
+        {
+          "check": "turn_overflow",
+          "field": "email_body",
+          "excerpt": "Is the final review for the Q3 audit complete?",
+          "detail": "email_body is 46 chars — underdeveloped (floor 60)"
+        }
+      ]
+    },
+    {
+      "check": "meta_bleed",
+      "passed": false,
+      "count": 1,
+      "findings": [
+        {
+          "check": "meta_bleed",
+          "field": "sms_body",
+          "excerpt": "…ted review — deadline remains at 15:00. Confirm via https://sim.fantazylabz.tech/t/c0bf…",
+          "detail": "instruction-echo pattern 'Confirm' in prose"
+        }
+      ]
+    },
+    {
+      "check": "loop_detection",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "pretext_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "name_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "brand_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "script_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    }
+  ],
+  "label_audit": {
+    "available": true,
+    "spec_labels": {
+      "pretext": "executive_request",
+      "tone": "urgent",
+      "difficulty": "medium"
+    },
+    "predicted_labels": {
+      "tone": "neutral",
+      "difficulty": "hard"
+    },
+    "statuses": {
+      "pretext": "unverifiable",
+      "tone": "mismatch",
+      "difficulty": "mismatch"
+    },
+    "mismatches": [
+      "tone",
+      "difficulty"
+    ]
+  },
+  "strip_stats": {
+    "affected_messages": 0,
+    "stripped_chars": 0,
+    "per_message": {}
+  },
+  "n_flags": 2,
+  "any_flag": true
+}

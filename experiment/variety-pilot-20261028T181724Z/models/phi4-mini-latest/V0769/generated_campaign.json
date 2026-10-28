@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "fatima.el-sayed@fantazylabz.tech",
+    "full_name": "Fatima El-Sayed",
+    "role": "Director of Operations & IT",
+    "department": "IT"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Urgent Password Reset Required for Fatima El-Sayed's Account!",
+      "body": "Dear Ms. El-Sayed,",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/3ae0f18331ce",
+        "button_label": "Reset Password"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "phi4-mini:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.0,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1769
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "86b3c33f54605f41effabb4fb68ddac42c33fdafd5bd6758198a7c368f59e73b",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Please click the link below to securely update your credentials before access is temporarily suspended:",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/3ae0f18331ce",
+        "button_label": "Reset Password"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "phi4-mini:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.0,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1769
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "86b3c33f54605f41effabb4fb68ddac42c33fdafd5bd6758198a7c368f59e73b",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "spec_id": "V0014",
+  "pretext": "it_support",
+  "results": [
+    {
+      "check": "dialogue_collapse",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "stage_direction",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "turn_overflow",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "meta_bleed",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "loop_detection",
+      "passed": false,
+      "count": 1,
+      "findings": [
+        {
+          "check": "loop_detection",
+          "field": "email_body",
+          "excerpt": "SSO access deactivates in 30 minutes",
+          "detail": "the email subject is restated verbatim in the body"
+        }
+      ]
+    },
+    {
+      "check": "pretext_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "name_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "brand_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "script_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    }
+  ],
+  "label_audit": {
+    "available": true,
+    "spec_labels": {
+      "pretext": "it_support",
+      "tone": "urgent",
+      "difficulty": "medium"
+    },
+    "predicted_labels": {
+      "difficulty": "easy"
+    },
+    "statuses": {
+      "pretext": "unverifiable",
+      "tone": "unverifiable",
+      "difficulty": "mismatch"
+    },
+    "mismatches": [
+      "difficulty"
+    ]
+  },
+  "strip_stats": {
+    "affected_messages": 0,
+    "stripped_chars": 0,
+    "per_message": {}
+  },
+  "n_flags": 1,
+  "any_flag": true
+}

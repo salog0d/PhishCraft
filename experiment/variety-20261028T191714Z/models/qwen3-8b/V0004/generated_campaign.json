@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "elena.marchetti@fantazylabz.tech",
+    "full_name": "Elena Marchetti",
+    "role": "Chief Executive Officer",
+    "department": "Executive"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Password Reset Required",
+      "body": "As discussed in our last interaction, your password reset is required. Over 200 executives have already reset their passwords. Please complete the process using https://sim.fantazylabz.tech/t/60729f2d3b76.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/60729f2d3b76",
+        "button_label": "Reset Password"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "qwen3:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 1.2,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1004
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "3df135933363a26281d9ff91739143823676f789a3754ebf7064bb8053b569af",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Reminder: Password reset needed by 10:00 AM. Account lock pending if not completed. Use https://sim.fantazylabz.tech/t/60729f2d3b76.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/60729f2d3b76",
+        "button_label": "Reset Password"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "qwen3:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 1.2,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1004
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "3df135933363a26281d9ff91739143823676f789a3754ebf7064bb8053b569af",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

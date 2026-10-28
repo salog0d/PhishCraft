@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "hannah.fischer@fantazylabz.tech",
+    "full_name": "Hannah Fischer",
+    "role": "Director of People Operations",
+    "department": "Human Resources"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "System update required by 15:00",
+      "body": "Hannah, your system update is pending. Complete it by 15:00 to avoid service disruption. https://sim.fantazylabz.tech/t/41daf5e86551",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/41daf5e86551",
+        "button_label": "Open Helpdesk"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "qwen3:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1015
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "7c0fb9015695f1828e5343fef65add4c97c500bb7fe50140e2e2bf62c5331bad",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Your update is still pending. A new system alert was detected. https://sim.fantazylabz.tech/t/41daf5e86551",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/41daf5e86551",
+        "button_label": "Open Helpdesk"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "qwen3:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1015
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "7c0fb9015695f1828e5343fef65add4c97c500bb7fe50140e2e2bf62c5331bad",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

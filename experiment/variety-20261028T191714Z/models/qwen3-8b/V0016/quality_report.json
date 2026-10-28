@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "spec_id": "V0016",
+  "pretext": "it_support",
+  "results": [
+    {
+      "check": "dialogue_collapse",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "stage_direction",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "turn_overflow",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "meta_bleed",
+      "passed": false,
+      "count": 2,
+      "findings": [
+        {
+          "check": "meta_bleed",
+          "field": "email_subject",
+          "excerpt": "Security Update Required: Confirm Your Access",
+          "detail": "instruction-echo pattern 'Confirm' in prose"
+        },
+        {
+          "check": "meta_bleed",
+          "field": "sms_body",
+          "excerpt": "Security update deadline approaching — confirm access via https://sim.fantazylabz.tech…",
+          "detail": "instruction-echo pattern 'confirm' in prose"
+        }
+      ]
+    },
+    {
+      "check": "loop_detection",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "pretext_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "name_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "brand_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "script_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    }
+  ],
+  "label_audit": {
+    "available": true,
+    "spec_labels": {
+      "pretext": "it_support",
+      "tone": "urgent",
+      "difficulty": "medium"
+    },
+    "predicted_labels": {
+      "tone": "neutral",
+      "difficulty": "easy"
+    },
+    "statuses": {
+      "pretext": "unverifiable",
+      "tone": "mismatch",
+      "difficulty": "mismatch"
+    },
+    "mismatches": [
+      "tone",
+      "difficulty"
+    ]
+  },
+  "strip_stats": {
+    "affected_messages": 0,
+    "stripped_chars": 0,
+    "per_message": {}
+  },
+  "n_flags": 2,
+  "any_flag": true
+}

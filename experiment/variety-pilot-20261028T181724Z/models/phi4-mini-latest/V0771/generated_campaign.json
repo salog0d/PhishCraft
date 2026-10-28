@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "fatima.el-sayed@fantazylabz.tech",
+    "full_name": "Fatima El-Sayed",
+    "role": "Director of Operations & IT",
+    "department": "IT"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Urgent Password Reset Required!",
+      "body": "A new password reset link has been sent to your registered email. Please click on the provided https://sim.fantazylabz.tech/t/717c3d0011bc immediately.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/717c3d0011bc",
+        "button_label": "Reset Password"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "phi4-mini:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1771
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "c41a51afdaf8e5077b73638c2b16085675d5c738bdf2e48dc937f30c2ddaf9f7",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Don't forget! Your current login session will expire in an hour, and you need a fresh one for secure access!",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/717c3d0011bc",
+        "button_label": "Reset Password"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "phi4-mini:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1771
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "c41a51afdaf8e5077b73638c2b16085675d5c738bdf2e48dc937f30c2ddaf9f7",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "spec_id": "V0063",
+  "pretext": "it_support",
+  "results": [
+    {
+      "check": "dialogue_collapse",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "stage_direction",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "turn_overflow",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "meta_bleed",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "loop_detection",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "pretext_contamination",
+      "passed": false,
+      "count": 1,
+      "findings": [
+        {
+          "check": "pretext_contamination",
+          "field": "email_body",
+          "excerpt": "…ure user accounts, please validate your credentials immediately via the secure portal below…",
+          "detail": "password_reset vocabulary bleeds into a it_support campaign (2 distinct terms: credentials, login)"
+        }
+      ]
+    },
+    {
+      "check": "name_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "brand_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "script_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    }
+  ],
+  "label_audit": {
+    "available": true,
+    "spec_labels": {
+      "pretext": "it_support",
+      "tone": "urgent",
+      "difficulty": "medium"
+    },
+    "predicted_labels": {
+      "pretext": "password_reset",
+      "tone": "authoritative",
+      "difficulty": "easy"
+    },
+    "statuses": {
+      "pretext": "mismatch",
+      "tone": "mismatch",
+      "difficulty": "mismatch"
+    },
+    "mismatches": [
+      "pretext",
+      "tone",
+      "difficulty"
+    ]
+  },
+  "strip_stats": {
+    "affected_messages": 0,
+    "stripped_chars": 0,
+    "per_message": {}
+  },
+  "n_flags": 1,
+  "any_flag": true
+}

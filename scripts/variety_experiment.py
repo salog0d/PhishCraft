@@ -156,18 +156,29 @@ def build_plan(
     temperatures: tuple[float, ...] = TEMPERATURE_SWEEP,
     top_p: float | None = None,
     max_tokens: int | None = None,
+    pretexts: tuple[str, ...] | None = None,
+    tones: tuple[str, ...] | None = None,
+    difficulties: tuple[str, ...] | None = None,
 ) -> list[dict]:
     """The full run list: balanced coverage of model x cell x temperature.
 
     Pass 1: every (model, cell) pair once at each temperature
-    (``len(models) * 96 * len(temperatures)`` runs).
+    (``len(models) * len(cells) * len(temperatures)`` runs).
     Pass 2: shuffled extra (model, cell) pairs at the *baseline* temperature
     (0.0), each with a different recipient than pass 1, up to ``total``.
+
+    ``pretexts``/``tones``/``difficulties`` subset the spec cells (all axes
+    default to the full set), so a time-constrained run can cover a balanced
+    sub-cell without changing the design.
 
     Each run carries its own ``params`` block with the sampled temperature so
     the sweep varies sampling semantics, not just the seed-derived URL.
     """
-    cells = list(product(PRETEXTS, TONES, DIFFICULTIES))
+    cells = list(product(
+        pretexts or PRETEXTS,
+        tones or TONES,
+        difficulties or DIFFICULTIES,
+    ))
     recipients = internal_recipient_ids()
     base = len(models) * len(cells) * len(temperatures)
     if not (base <= total <= 2 * base):
@@ -456,11 +467,15 @@ def run_parent(
     temperatures: tuple[float, ...],
     top_p: float | None = None,
     max_tokens: int | None = None,
+    pretexts: tuple[str, ...] | None = None,
+    tones: tuple[str, ...] | None = None,
+    difficulties: tuple[str, ...] | None = None,
 ) -> int:
     out.mkdir(parents=True, exist_ok=True)
     runs = build_plan(
         models, total=total,
         temperatures=temperatures, top_p=top_p, max_tokens=max_tokens,
+        pretexts=pretexts, tones=tones, difficulties=difficulties,
     )
     if pilot:
         # Pilot: keep ``pilot`` runs per (model, temperature) so the sweep is
@@ -590,6 +605,12 @@ def main() -> None:
     parser.add_argument("--max-tokens", dest="max_tokens", type=int,
                         default=DEFAULT_MAX_TOKENS,
                         help="max output tokens (default: provider default)")
+    parser.add_argument("--pretexts", default=None,
+                        help="comma-separated pretexts to run (default: all 8)")
+    parser.add_argument("--tones", default=None,
+                        help="comma-separated tones to run (default: all 4)")
+    parser.add_argument("--difficulties", default=None,
+                        help="comma-separated difficulties (default: all 3)")
     args = parser.parse_args()
 
     if args.child:
@@ -613,14 +634,22 @@ def main() -> None:
     )
     if not models:
         raise SystemExit("no models found — is the Ollama daemon running?")
+
+    def _csv_split(value):
+        return tuple(v.strip() for v in value.split(",") if v.strip()) or None
+
     out = Path(
         args.out
         or f"experiment/variety-{'pilot-' if args.pilot else ''}"
         f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     )
     raise SystemExit(
-        run_parent(out, models, args.runs, args.pilot, args.workers,
-                   args.run_timeout, temperatures, args.top_p, args.max_tokens)
+        run_parent(
+            out, models, args.runs, args.pilot, args.workers,
+            args.run_timeout, temperatures, args.top_p, args.max_tokens,
+            _csv_split(args.pretexts), _csv_split(args.tones),
+            _csv_split(args.difficulties),
+        )
     )
 
 

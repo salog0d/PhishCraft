@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "hannah.fischer@fantazylabz.tech",
+    "full_name": "Hannah Fischer",
+    "role": "Director of People Operations",
+    "department": "Human Resources"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Urgent Password Reset Required for HR System Access",
+      "body": "Is your password up to date? The IT Service Desk needs you. Please initiate the reset process now.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/246a7be5dd47",
+        "button_label": "Reset Password"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "phi4-mini:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.5,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1774
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "834fd0672a20e9fb6f43f05c3f0b66856f13047c3e331dbbce22765249c11603",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Hannah, please confirm that you've received this message and have initiated a new login attempt on our HR portal using https://sim.fantazylabz.tech/t/246a7be5dd47 before end of day for security reasons.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/246a7be5dd47",
+        "button_label": "Reset Password"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "phi4-mini:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.5,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1774
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "834fd0672a20e9fb6f43f05c3f0b66856f13047c3e331dbbce22765249c11603",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

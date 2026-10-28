@@ -1,0 +1,446 @@
+{
+  "generated_at": "2026-10-28T18:17:24.739868Z",
+  "design": {
+    "pretexts": [
+      "password_reset",
+      "account_suspension",
+      "package_delivery",
+      "it_support",
+      "hr_notice",
+      "executive_request",
+      "shared_document",
+      "invoice_payment"
+    ],
+    "tones": [
+      "urgent",
+      "friendly",
+      "authoritative",
+      "neutral"
+    ],
+    "difficulties": [
+      "easy",
+      "medium",
+      "hard"
+    ],
+    "recipients": [
+      "1",
+      "11",
+      "12",
+      "16",
+      "2",
+      "24",
+      "25",
+      "3",
+      "4",
+      "40",
+      "41",
+      "7"
+    ],
+    "language": "en",
+    "start_at": "2026-08-20T09:00:00Z",
+    "followup_minutes": 75,
+    "pilot": true,
+    "design_seed": 20261026,
+    "temperatures": [
+      0.0,
+      0.5,
+      0.8,
+      1.2
+    ],
+    "top_p": null,
+    "max_tokens": null
+  },
+  "models": [
+    "qwen3:8b",
+    "llama3.1:8b",
+    "phi4-mini:latest",
+    "gemma4:latest"
+  ],
+  "total": 32,
+  "runs": [
+    {
+      "model": "qwen3:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "1",
+      "params": {
+        "temperature": 0.0
+      },
+      "run_id": "V0001",
+      "seed": 1001
+    },
+    {
+      "model": "qwen3:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "1",
+      "params": {
+        "temperature": 0.5
+      },
+      "run_id": "V0002",
+      "seed": 1002
+    },
+    {
+      "model": "qwen3:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "1",
+      "params": {
+        "temperature": 0.8
+      },
+      "run_id": "V0003",
+      "seed": 1003
+    },
+    {
+      "model": "qwen3:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "1",
+      "params": {
+        "temperature": 1.2
+      },
+      "run_id": "V0004",
+      "seed": 1004
+    },
+    {
+      "model": "qwen3:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "11",
+      "params": {
+        "temperature": 0.0
+      },
+      "run_id": "V0005",
+      "seed": 1005
+    },
+    {
+      "model": "qwen3:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "11",
+      "params": {
+        "temperature": 0.5
+      },
+      "run_id": "V0006",
+      "seed": 1006
+    },
+    {
+      "model": "qwen3:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "11",
+      "params": {
+        "temperature": 0.8
+      },
+      "run_id": "V0007",
+      "seed": 1007
+    },
+    {
+      "model": "qwen3:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "11",
+      "params": {
+        "temperature": 1.2
+      },
+      "run_id": "V0008",
+      "seed": 1008
+    },
+    {
+      "model": "llama3.1:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "11",
+      "params": {
+        "temperature": 0.0
+      },
+      "run_id": "V0385",
+      "seed": 1385
+    },
+    {
+      "model": "llama3.1:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "11",
+      "params": {
+        "temperature": 0.5
+      },
+      "run_id": "V0386",
+      "seed": 1386
+    },
+    {
+      "model": "llama3.1:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "11",
+      "params": {
+        "temperature": 0.8
+      },
+      "run_id": "V0387",
+      "seed": 1387
+    },
+    {
+      "model": "llama3.1:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "11",
+      "params": {
+        "temperature": 1.2
+      },
+      "run_id": "V0388",
+      "seed": 1388
+    },
+    {
+      "model": "llama3.1:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "12",
+      "params": {
+        "temperature": 0.0
+      },
+      "run_id": "V0389",
+      "seed": 1389
+    },
+    {
+      "model": "llama3.1:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "12",
+      "params": {
+        "temperature": 0.5
+      },
+      "run_id": "V0390",
+      "seed": 1390
+    },
+    {
+      "model": "llama3.1:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "12",
+      "params": {
+        "temperature": 0.8
+      },
+      "run_id": "V0391",
+      "seed": 1391
+    },
+    {
+      "model": "llama3.1:8b",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "12",
+      "params": {
+        "temperature": 1.2
+      },
+      "run_id": "V0392",
+      "seed": 1392
+    },
+    {
+      "model": "phi4-mini:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "12",
+      "params": {
+        "temperature": 0.0
+      },
+      "run_id": "V0769",
+      "seed": 1769
+    },
+    {
+      "model": "phi4-mini:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "12",
+      "params": {
+        "temperature": 0.5
+      },
+      "run_id": "V0770",
+      "seed": 1770
+    },
+    {
+      "model": "phi4-mini:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "12",
+      "params": {
+        "temperature": 0.8
+      },
+      "run_id": "V0771",
+      "seed": 1771
+    },
+    {
+      "model": "phi4-mini:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "12",
+      "params": {
+        "temperature": 1.2
+      },
+      "run_id": "V0772",
+      "seed": 1772
+    },
+    {
+      "model": "phi4-mini:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "16",
+      "params": {
+        "temperature": 0.0
+      },
+      "run_id": "V0773",
+      "seed": 1773
+    },
+    {
+      "model": "phi4-mini:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "16",
+      "params": {
+        "temperature": 0.5
+      },
+      "run_id": "V0774",
+      "seed": 1774
+    },
+    {
+      "model": "phi4-mini:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "16",
+      "params": {
+        "temperature": 0.8
+      },
+      "run_id": "V0775",
+      "seed": 1775
+    },
+    {
+      "model": "phi4-mini:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "16",
+      "params": {
+        "temperature": 1.2
+      },
+      "run_id": "V0776",
+      "seed": 1776
+    },
+    {
+      "model": "gemma4:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "16",
+      "params": {
+        "temperature": 0.0
+      },
+      "run_id": "V1153",
+      "seed": 2153
+    },
+    {
+      "model": "gemma4:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "16",
+      "params": {
+        "temperature": 0.5
+      },
+      "run_id": "V1154",
+      "seed": 2154
+    },
+    {
+      "model": "gemma4:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "16",
+      "params": {
+        "temperature": 0.8
+      },
+      "run_id": "V1155",
+      "seed": 2155
+    },
+    {
+      "model": "gemma4:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy",
+      "recipient_id": "16",
+      "params": {
+        "temperature": 1.2
+      },
+      "run_id": "V1156",
+      "seed": 2156
+    },
+    {
+      "model": "gemma4:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "2",
+      "params": {
+        "temperature": 0.0
+      },
+      "run_id": "V1157",
+      "seed": 2157
+    },
+    {
+      "model": "gemma4:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "2",
+      "params": {
+        "temperature": 0.5
+      },
+      "run_id": "V1158",
+      "seed": 2158
+    },
+    {
+      "model": "gemma4:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "2",
+      "params": {
+        "temperature": 0.8
+      },
+      "run_id": "V1159",
+      "seed": 2159
+    },
+    {
+      "model": "gemma4:latest",
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium",
+      "recipient_id": "2",
+      "params": {
+        "temperature": 1.2
+      },
+      "run_id": "V1160",
+      "seed": 2160
+    }
+  ]
+}

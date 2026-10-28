@@ -1,0 +1,107 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "spec_id": "V0046",
+  "pretext": "it_support",
+  "results": [
+    {
+      "check": "dialogue_collapse",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "stage_direction",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "turn_overflow",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "meta_bleed",
+      "passed": false,
+      "count": 3,
+      "findings": [
+        {
+          "check": "meta_bleed",
+          "field": "email_subject",
+          "excerpt": "Urgent Action Required for Q3 Vendor Statement Access",
+          "detail": "instruction-echo pattern 'Action Required' in prose"
+        },
+        {
+          "check": "meta_bleed",
+          "field": "email_body",
+          "excerpt": "Samuel, please review the attached vendor statement summary a…",
+          "detail": "instruction-echo pattern 'please review' in prose"
+        },
+        {
+          "check": "meta_bleed",
+          "field": "sms_body",
+          "excerpt": "Please confirm your access and let us know if you enco…",
+          "detail": "instruction-echo pattern 'confirm' in prose"
+        }
+      ]
+    },
+    {
+      "check": "loop_detection",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "pretext_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "name_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "brand_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "script_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    }
+  ],
+  "label_audit": {
+    "available": true,
+    "spec_labels": {
+      "pretext": "it_support",
+      "tone": "urgent",
+      "difficulty": "medium"
+    },
+    "predicted_labels": {
+      "tone": "neutral",
+      "difficulty": "medium"
+    },
+    "statuses": {
+      "pretext": "unverifiable",
+      "tone": "mismatch",
+      "difficulty": "ok"
+    },
+    "mismatches": [
+      "tone"
+    ]
+  },
+  "strip_stats": {
+    "affected_messages": 0,
+    "stripped_chars": 0,
+    "per_message": {}
+  },
+  "n_flags": 3,
+  "any_flag": true
+}

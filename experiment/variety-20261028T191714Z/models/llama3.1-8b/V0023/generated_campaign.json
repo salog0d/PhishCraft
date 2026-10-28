@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "Northwind Supplies — Accounts Payable",
+    "email": "ap@northwind-supplies.example",
+    "role": null,
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "fatima.el-sayed@fantazylabz.tech",
+    "full_name": "Fatima El-Sayed",
+    "role": "Director of Operations & IT",
+    "department": "IT"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "Northwind Supplies — Accounts Payable",
+        "from_address": "ap@northwind-supplies.example",
+        "impersonated_brand": null
+      },
+      "subject": "Urgent: Q3 vendor statement available for review",
+      "body": "Good morning Fatima,",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/d44d1c97dad0",
+        "button_label": "View Invoice"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1023
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "3edbca514cc95793c0f31a6e403ec7fceed0f7c7e69de9e374bc301f9e6c309c",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "Northwind Supplies — Accounts Payable",
+        "from_address": "ap@northwind-supplies.example",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Urgent: Revalidation still open; deadline in 1 hour — use https://sim.fantazylabz.tech/t/d44d1c97dad0 now.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/d44d1c97dad0",
+        "button_label": "View Invoice"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1023
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "3edbca514cc95793c0f31a6e403ec7fceed0f7c7e69de9e374bc301f9e6c309c",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

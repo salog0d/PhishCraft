@@ -1,0 +1,31 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "results": [
+    {
+      "check": "persona_identity",
+      "passed": true,
+      "detail": "all 2 messages match the persona"
+    },
+    {
+      "check": "timing",
+      "passed": true,
+      "detail": "no ordering violations"
+    },
+    {
+      "check": "cross_channel_reference",
+      "passed": true,
+      "detail": "all references resolve"
+    },
+    {
+      "check": "link_consistency",
+      "passed": true,
+      "detail": "all body links match the CTA"
+    },
+    {
+      "check": "sender_recipient",
+      "passed": true,
+      "detail": "persona 'IT Service Desk' is not the recipient 'Gregory Whitfield'"
+    }
+  ],
+  "all_passed": true
+}

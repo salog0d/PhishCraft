@@ -1,0 +1,37 @@
+[child] model=llama3.1:8b runs=16 (skipped 0 already ok)
+[V0017] ok flags=1 mismatch=[] 82.1s (eta 21m)
+[V0018] ok flags=1 mismatch=['difficulty'] 34.3s (eta 14m)
+13:19:33 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0019] ok flags=1 mismatch=[] 17.8s (eta 10m)
+13:19:57 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 2 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0020] ok flags=0 mismatch=['difficulty'] 24.1s (eta 8m)
+13:20:12 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 3 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0021] ok flags=1 mismatch=[] 14.5s (eta 6m)
+13:20:44 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 4 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0022] ok flags=1 mismatch=[] 68.7s (eta 7m)
+attempt 1/3 produced no valid campaign (ValidationError: 2 validation errors for GeneratedCampaign
+messages.0.body
+  String should have at least 1 character [type=string_too_short, input_value='', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_too_short
+messages.1.body
+  String should have at least 1 character [type=string_too_short, input_value='', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_too_short); retrying
+attempt 2/3 produced no valid campaign (ValueError: bindings missing 'subject'); retrying
+[V0023] ok flags=1 mismatch=[] 100.4s (eta 7m)
+[V0024] ok flags=1 mismatch=[] 15.8s (eta 6m)
+13:24:07 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0025] ok flags=2 mismatch=['tone', 'difficulty'] 173.2s (eta 7m)
+[V0026] ok flags=1 mismatch=['tone'] 54.7s (eta 6m)
+13:27:29 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0027] ok flags=3 mismatch=['pretext', 'tone'] 106.1s (eta 5m)
+[V0028] ok flags=2 mismatch=[] 113.6s (eta 4m)
+[V0029] ok flags=3 mismatch=['pretext', 'tone'] 131.1s (eta 4m)
+attempt 1/3 produced no valid campaign (ValidationError: 1 validation error for GeneratedCampaign
+messages.1.body
+  String should have at least 1 character [type=string_too_short, input_value='', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_too_short); retrying
+[V0030] ok flags=1 mismatch=['pretext', 'difficulty'] 112.4s (eta 2m)
+[V0031] ok flags=0 mismatch=['pretext'] 31.7s (eta 1m)
+13:35:41 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V0032] ok flags=1 mismatch=['tone', 'difficulty'] 21.5s (eta 0m)
+[child] llama3.1:8b: 16 runs in 18.4m

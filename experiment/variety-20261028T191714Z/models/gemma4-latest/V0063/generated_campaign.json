@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "natalia.popov@fantazylabz.tech",
+    "full_name": "Natalia Popov",
+    "role": "IT Manager",
+    "department": "IT"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Critical security alert: Mandatory access refresh required",
+      "body": "Network services are experiencing elevated login failures across multiple departments. To maintain compliance and secure user accounts, please validate your credentials immediately via the secure portal below.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/852f8efa7711",
+        "button_label": "Open Helpdesk"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "gemma4:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1063
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "085793808421f25f89427b3e0fd1c6668d672d57bee9c073345becd60b6ff165",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Just a heads up — saw you checked the email about the access refresh. Remember, the portal validation window is closing soon.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/852f8efa7711",
+        "button_label": "Open Helpdesk"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "gemma4:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1063
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "085793808421f25f89427b3e0fd1c6668d672d57bee9c073345becd60b6ff165",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "Gregory Whitfield",
+    "email": "gregory.whitfield@fantazylabz.tech",
+    "role": "Director of Finance",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "samuel.adeyemi@fantazylabz.tech",
+    "full_name": "Samuel Adeyemi",
+    "role": "Accounting Manager",
+    "department": "Finance"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "Gregory Whitfield",
+        "from_address": "gregory.whitfield@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Immediate: Q3 Reconciliation Submission Required",
+      "body": "Did you finalize the Q3 reconciliation data? Please verify the attached ledger and submit the final report via the portal. This must be completed by 15:00 today.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/c1af3ac120e7",
+        "button_label": "Review Summary"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "gemma4:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.5,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1058
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "457f50e4214d19e6fdcdfe5c79167653965bf91b0f48761e36915cc85f6e307c",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "Gregory Whitfield",
+        "from_address": "gregory.whitfield@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Reconciling data needed — the VP's approval signature is missing. Use https://sim.fantazylabz.tech/t/c1af3ac120e7 now.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/c1af3ac120e7",
+        "button_label": "Review Summary"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "gemma4:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.5,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1058
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "457f50e4214d19e6fdcdfe5c79167653965bf91b0f48761e36915cc85f6e307c",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

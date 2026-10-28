@@ -1,0 +1,89 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "spec_id": "V0386",
+  "pretext": "password_reset",
+  "results": [
+    {
+      "check": "dialogue_collapse",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "stage_direction",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "turn_overflow",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "meta_bleed",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "loop_detection",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "pretext_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "name_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "brand_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "script_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    }
+  ],
+  "label_audit": {
+    "available": true,
+    "spec_labels": {
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "easy"
+    },
+    "predicted_labels": {
+      "pretext": "password_reset",
+      "tone": "urgent",
+      "difficulty": "medium"
+    },
+    "statuses": {
+      "pretext": "ok",
+      "tone": "ok",
+      "difficulty": "mismatch"
+    },
+    "mismatches": [
+      "difficulty"
+    ]
+  },
+  "strip_stats": {
+    "affected_messages": 0,
+    "stripped_chars": 0,
+    "per_message": {}
+  },
+  "n_flags": 0,
+  "any_flag": false
+}

@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "rajesh.kapoor@fantazylabz.tech",
+    "full_name": "Rajesh Kapoor",
+    "role": "Chief Technology Officer",
+    "department": "Engineering"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Urgent: Compliance Package Due Today",
+      "body": "Mr. Kapoor, please ensure the compliance package is uploaded to our secure server by end of day today. Failure to comply may result in system access revocation.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/b1f34b01f65d",
+        "button_label": "Open Helpdesk"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1031
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "38b8e8058a1d6a318c7a848114b328a9dc1578351439e2ec4e57277b1653dfbb",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Deadline reminder: upload compliance package via https://sim.fantazylabz.tech/t/b1f34b01f65d before 17:00 today or face system access restrictions.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/b1f34b01f65d",
+        "button_label": "Open Helpdesk"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "llama3.1:8b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.8,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 1031
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "38b8e8058a1d6a318c7a848114b328a9dc1578351439e2ec4e57277b1653dfbb",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}

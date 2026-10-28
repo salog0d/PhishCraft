@@ -1,0 +1,16 @@
+[child] model=gemma4:latest runs=8 (skipped 16 already ok)
+[V1153] ok flags=0 mismatch=['tone', 'difficulty'] 70.2s (eta 8m)
+12:27:41 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V1154] ok flags=0 mismatch=['difficulty'] 66.8s (eta 7m)
+12:28:33 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 2 pending and revived 0 dequeued logging task(s) onto the new loop
+[V1155] ok flags=0 mismatch=['tone', 'difficulty'] 52.2s (eta 5m)
+12:29:41 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 3 pending and revived 0 dequeued logging task(s) onto the new loop
+[V1156] ok flags=0 mismatch=['difficulty'] 68.2s (eta 4m)
+12:30:44 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 4 pending and revived 0 dequeued logging task(s) onto the new loop
+[V1157] ok flags=0 mismatch=['tone'] 139.5s (eta 4m)
+[V1158] ok flags=1 mismatch=['tone', 'difficulty'] 67.5s (eta 3m)
+12:34:18 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 1 pending and revived 0 dequeued logging task(s) onto the new loop
+[V1159] ok flags=0 mismatch=['difficulty'] 69.7s (eta 1m)
+12:35:21 - LiteLLM:WARNING: logging_worker.py:129 - LoggingWorker: event loop changed; carried 2 pending and revived 0 dequeued logging task(s) onto the new loop
+[V1160] ok flags=0 mismatch=['difficulty'] 203.6s (eta 0m)
+[child] gemma4:latest: 8 runs in 12.3m

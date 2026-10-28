@@ -1,0 +1,62 @@
+{
+  "run_id": "V1160",
+  "model": "gemma4:latest",
+  "spec": {
+    "spec_id": "V1160",
+    "campaign_id": "q3-awareness-2026",
+    "pretext": "password_reset",
+    "tone": "urgent",
+    "difficulty": "medium",
+    "language": "en",
+    "seed": 2160,
+    "model": {
+      "family": "local",
+      "name": "gemma4:latest",
+      "adapter_version": "1.0"
+    },
+    "recipient_id": "2",
+    "start_at": "2026-08-20T09:00:00Z",
+    "followup_minutes": 75,
+    "params": {
+      "temperature": 1.2
+    }
+  },
+  "status": "ok",
+  "ran_at": "2026-10-28T18:34:18.267264Z",
+  "error": null,
+  "duration_ms": 203563,
+  "run_info": {
+    "n_attempts": 3,
+    "refined": true,
+    "first_attempt_raw_link_violations": 0
+  },
+  "failing_checks": [],
+  "raw_link_violations": 0,
+  "quality": {
+    "n_flags": 0,
+    "any_flag": false,
+    "failing": [],
+    "contamination": [],
+    "label_mismatches": [
+      "difficulty"
+    ],
+    "label_statuses": {
+      "pretext": "ok",
+      "tone": "ok",
+      "difficulty": "mismatch"
+    },
+    "strip_affected_messages": 0,
+    "strip_stripped_chars": 0
+  },
+  "quality_counts": {
+    "dialogue_collapse": 0,
+    "stage_direction": 0,
+    "turn_overflow": 0,
+    "meta_bleed": 0,
+    "loop_detection": 0,
+    "pretext_contamination": 0,
+    "name_contamination": 0,
+    "brand_contamination": 0,
+    "script_contamination": 0
+  }
+}

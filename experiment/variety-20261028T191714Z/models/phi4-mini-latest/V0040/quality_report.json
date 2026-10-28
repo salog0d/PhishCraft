@@ -1,0 +1,95 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "spec_id": "V0040",
+  "pretext": "invoice_payment",
+  "results": [
+    {
+      "check": "dialogue_collapse",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "stage_direction",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "turn_overflow",
+      "passed": false,
+      "count": 1,
+      "findings": [
+        {
+          "check": "turn_overflow",
+          "field": "email_body",
+          "excerpt": "Good morning, Hannah Fischer,",
+          "detail": "email_body is 29 chars — underdeveloped (floor 60)"
+        }
+      ]
+    },
+    {
+      "check": "meta_bleed",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "loop_detection",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "pretext_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "name_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "brand_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    },
+    {
+      "check": "script_contamination",
+      "passed": true,
+      "count": 0,
+      "findings": []
+    }
+  ],
+  "label_audit": {
+    "available": true,
+    "spec_labels": {
+      "pretext": "invoice_payment",
+      "tone": "urgent",
+      "difficulty": "medium"
+    },
+    "predicted_labels": {
+      "pretext": "invoice_payment",
+      "difficulty": "easy"
+    },
+    "statuses": {
+      "pretext": "ok",
+      "tone": "unverifiable",
+      "difficulty": "mismatch"
+    },
+    "mismatches": [
+      "difficulty"
+    ]
+  },
+  "strip_stats": {
+    "affected_messages": 0,
+    "stripped_chars": 0,
+    "per_message": {}
+  },
+  "n_flags": 1,
+  "any_flag": true
+}

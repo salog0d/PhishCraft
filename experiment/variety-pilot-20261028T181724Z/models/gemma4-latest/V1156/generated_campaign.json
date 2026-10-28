@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "IT Service Desk",
+    "email": "helpdesk@fantazylabz.tech",
+    "role": "IT Service Desk",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "hannah.fischer@fantazylabz.tech",
+    "full_name": "Hannah Fischer",
+    "role": "Director of People Operations",
+    "department": "Human Resources"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Password reset due",
+      "body": "Following up on your previous ticket, reset your primary credentials immediately via the single sign-on portal. This action must be finished before the close of business hours to maintain system access.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/a4b2f1734515",
+        "button_label": "Reset Password"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "gemma4:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 1.2,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 2156
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "906feb91a4be108b35d057f828f41dd2d7170dec7a87f0a96a73d192c649a649",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "IT Service Desk",
+        "from_address": "helpdesk@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Credentials still show as incomplete on our backend — finalize the password reset process immediately to prevent service interruptions.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/a4b2f1734515",
+        "button_label": "Reset Password"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "gemma4:latest",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 1.2,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 2156
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "906feb91a4be108b35d057f828f41dd2d7170dec7a87f0a96a73d192c649a649",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}
