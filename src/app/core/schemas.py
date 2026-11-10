@@ -81,6 +81,15 @@ class Pretext(str, Enum):
     EXECUTIVE_REQUEST = "executive_request"
     SHARED_DOCUMENT = "shared_document"
     ACCOUNT_SUSPENSION = "account_suspension"
+    # BEC variants (FBI / industry taxonomy) — expanded per the BEC taxonomy
+    # report: vendor bank-detail change, account takeover, attorney
+    # impersonation, data/W-2 theft, payroll diversion, and gift-card fraud.
+    BANK_DETAIL_CHANGE = "bank_detail_change"
+    ACCOUNT_COMPROMISE = "account_compromise"
+    ATTORNEY_IMPERSONATION = "attorney_impersonation"
+    DATA_THEFT = "data_theft"
+    PAYROLL_DIVERSION = "payroll_diversion"
+    GIFT_CARD = "gift_card"
 
     @property
     def category(self) -> "PretextCategory":
@@ -107,6 +116,12 @@ PRETEXT_CATEGORY = {
     Pretext.SHARED_DOCUMENT: PretextCategory.BEC,
     Pretext.HR_NOTICE: PretextCategory.BEC,
     Pretext.IT_SUPPORT: PretextCategory.BEC,
+    Pretext.BANK_DETAIL_CHANGE: PretextCategory.BEC,
+    Pretext.ACCOUNT_COMPROMISE: PretextCategory.BEC,
+    Pretext.ATTORNEY_IMPERSONATION: PretextCategory.BEC,
+    Pretext.DATA_THEFT: PretextCategory.BEC,
+    Pretext.PAYROLL_DIVERSION: PretextCategory.BEC,
+    Pretext.GIFT_CARD: PretextCategory.BEC,
 }
 
 
@@ -203,7 +218,7 @@ class ModelSpec(BaseModel, frozen=True):
 class GenerationParams(BaseModel):
     """Decoding parameters. ``seed`` makes a generation reproducible."""
 
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    temperature: float = Field(default=0.9, ge=0.0, le=2.0)
     top_p: float = Field(default=1.0, ge=0.0, le=1.0)
     max_tokens: int = Field(default=1024, ge=1, le=32768)
     seed: int = Field(

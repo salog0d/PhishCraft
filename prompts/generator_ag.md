@@ -188,6 +188,12 @@ CTA_BY_PRETEXT = {
     "executive_request": ("click_link", "Review Summary"),
     "shared_document": ("click_link", "Open Document"),
     "account_suspension": ("enter_credentials", "Reactivate Account"),
+    "bank_detail_change": ("click_link", "Update Bank Details"),
+    "account_compromise": ("click_link", "View Request"),
+    "attorney_impersonation": ("click_link", "Open File"),
+    "data_theft": ("open_attachment", "Open Attachment"),
+    "payroll_diversion": ("click_link", "Update Deposit Details"),
+    "gift_card": ("click_link", "View Instruction"),
 }
 
 # [FIX A] Seed-derived variation axes. These *reshape the instruction* so that

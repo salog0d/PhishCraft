@@ -130,12 +130,16 @@ def _external_for_pretext(pretext: str) -> dict | None:
 def persona_for(pretext: str, recipient_id) -> dict:
     """Deterministic impersonated identity for a ``(pretext, recipient)`` pair.
 
-    - ``executive_request`` / ``shared_document`` -> the recipient's direct
-      manager from the org chart (the CFO for a managerless executive).
+    - ``executive_request`` / ``shared_document`` / ``data_theft`` /
+      ``gift_card`` -> the recipient's direct manager from the org chart (the
+      CFO for a managerless executive).
     - ``hr_notice`` -> the People Operations department alias.
     - ``it_support`` / ``password_reset`` -> the internal IT service desk.
-    - ``invoice_payment`` / ``package_delivery`` / ``account_suspension`` ->
-      the external persona supporting the pretext (supplier / carrier / bank).
+    - ``invoice_payment`` / ``package_delivery`` / ``account_suspension`` /
+      ``bank_detail_change`` / ``attorney_impersonation`` -> the external
+      persona supporting the pretext (supplier / carrier / bank / law firm).
+    - ``account_compromise`` / ``payroll_diversion`` -> the recipient's manager
+      (a credible internal colleague identity).
     - A persona never impersonates its own recipient: on a collision it falls
       back to the service desk (internal target) or the CEO (external target).
     """
@@ -144,7 +148,8 @@ def persona_for(pretext: str, recipient_id) -> dict:
     if recipient is None:
         raise KeyError(f"no catalog entry for id '{recipient_id}'")
 
-    if pretext in ("executive_request", "shared_document"):
+    if pretext in ("executive_request", "shared_document", "data_theft",
+                   "gift_card"):
         candidate = _manager_of(str(recipient_id))
         if candidate is None:
             candidate = _employee_persona(_employee_named(_FALLBACK_EXECUTIVE))
@@ -152,8 +157,15 @@ def persona_for(pretext: str, recipient_id) -> dict:
         candidate = dict(_PEOPLE_OPS)
     elif pretext in ("it_support", "password_reset"):
         candidate = dict(_HELP_DESK)
-    elif pretext in ("invoice_payment", "package_delivery", "account_suspension"):
+    elif pretext in ("invoice_payment", "package_delivery", "account_suspension",
+                     "bank_detail_change", "attorney_impersonation"):
         candidate = _external_for_pretext(pretext) or dict(_HELP_DESK)
+    elif pretext in ("account_compromise", "payroll_diversion"):
+        # A (compromised or spoofed) colleague impersonation: the recipient's
+        # manager is the most credible internal identity for these.
+        candidate = _manager_of(str(recipient_id))
+        if candidate is None:
+            candidate = _employee_persona(_employee_named(_FALLBACK_TOP))
     else:
         candidate = _manager_of(str(recipient_id)) or _employee_persona(
             _employee_named(_FALLBACK_TOP)

@@ -267,7 +267,10 @@ def test_pretexts_are_tagged_by_scenario_category():
                 fc.Pretext.PACKAGE_DELIVERY}
     bec = {fc.Pretext.EXECUTIVE_REQUEST, fc.Pretext.INVOICE_PAYMENT,
            fc.Pretext.SHARED_DOCUMENT, fc.Pretext.HR_NOTICE,
-           fc.Pretext.IT_SUPPORT}
+           fc.Pretext.IT_SUPPORT, fc.Pretext.BANK_DETAIL_CHANGE,
+           fc.Pretext.ACCOUNT_COMPROMISE, fc.Pretext.ATTORNEY_IMPERSONATION,
+           fc.Pretext.DATA_THEFT, fc.Pretext.PAYROLL_DIVERSION,
+           fc.Pretext.GIFT_CARD}
     assert set(fc.Pretext) == consumer | bec
     for pretext in consumer:
         assert pretext.category is fc.PretextCategory.CONSUMER

@@ -7,7 +7,7 @@
       "display_name": "Northwind Supplies — Accounts Payable",
       "email": "ap@northwind-supplies.example",
       "brand": "Northwind Supplies",
-      "supports_pretexts": ["invoice_payment", "shared_document"]
+      "supports_pretexts": ["invoice_payment", "shared_document", "bank_detail_change"]
     },
     {
       "persona_id": "ext-bank-01",
@@ -26,6 +26,15 @@
       "email": "notifications@swiftship.example",
       "brand": "SwiftShip Logistics",
       "supports_pretexts": ["package_delivery"]
+    },
+    {
+      "persona_id": "ext-law-01",
+      "class": "external",
+      "org_type": "law_firm",
+      "display_name": "Hartwell & Vance LLP — Corporate Counsel",
+      "email": "counsel@hartwellvance.example",
+      "brand": "Hartwell & Vance LLP",
+      "supports_pretexts": ["attorney_impersonation"]
     }
   ]
 }

@@ -148,7 +148,7 @@ model.
 | `channel` | enum | `email` \| `sms` (default `email`). |
 | `model.family` | enum | `anthropic`, `openai`, `mistral`, `llama`, `local`, `deepseek`. |
 | `params.seed` | integer ≥ 0 | **Required** — makes the generation reproducible. |
-| `pretext` | enum | Consumer: `password_reset`, `account_suspension`, `package_delivery` · BEC: `executive_request`, `invoice_payment`, `shared_document`, `hr_notice`, `it_support` (see `Pretext.category`). |
+| `pretext` | enum | Consumer: `password_reset`, `account_suspension`, `package_delivery` · BEC: `executive_request`, `invoice_payment`, `shared_document`, `hr_notice`, `it_support`, `bank_detail_change`, `account_compromise`, `attorney_impersonation`, `data_theft`, `payroll_diversion`, `gift_card` (see `Pretext.category`). |
 | `call_to_action.type` | enum | `click_link`, `enter_credentials`, `open_attachment`, `reply`. |
 | `subject_hint` / `include_tracking_pixel` | — | **Email only**; must be unset/`false` for SMS. |
 
