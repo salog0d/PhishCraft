@@ -22,16 +22,13 @@ The docs are organized into five sections.
 | Document | Description |
 |----------|-------------|
 | [Model catalog](./design/models.md) | Cross-family study candidates (standard open instructs; what was ruled out and why). |
-| [Generator reliability plan](./design/reliability-plan.md) | The design rationale behind the current build (workstreams W0–W5) + the Oct-2026 review addendum. |
 | [Bitácora](./design/bitacora.md) | Lab notebook: dated findings, decisions, and open questions. |
-| [Repository audit](./design/audit.md) | One-shot audit of the codebase: findings and their status. |
 
 ### Guides — how to use and extend it
 
 | Document | Description |
 |----------|-------------|
 | [PhishCraft User Guide](./guides/pt-shell-guide.md) | **How to use the tool**: install, launch, commands, settings, models, offline mode, measurement, troubleshooting. |
-| [Implementation instructions](./guides/implementation-instructions.md) | Step-by-step execution plan (ADK pipeline + measurement) for an implementing agent. |
 
 ### Reference — contracts and data
 

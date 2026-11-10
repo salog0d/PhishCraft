@@ -271,7 +271,6 @@ All source packages now live under `src/` (the standard `src` layout); the
 | `requirements.txt` | Pinned dependencies (`google-adk`, `litellm`, `fastapi`, `pydantic`, …). |
 | `pyproject.toml` | Package metadata + build config (`src/` layout) and pytest config. |
 | `compose.yaml` | Local MailHog SMTP sink used by `--send` (delivery sandbox). |
-| `implementation-instructions.md` | Step-by-step execution plan (ADK pipeline + measurement) for an implementing agent — now at `docs/guides/implementation-instructions.md`. |
 | `.gitignore` | Excludes `venv/`, caches, `.env`, and other non-versioned files. |
 | `src/` | All Python packages (`agent`, `app`, `generator_agent`, `measurement`, `monitoring`, `ptshell`, `quality_agent`, `validator_agent`) and `tests`. |
 | `config/`, `org/`, `prompts/`, `data/` | Non-code inputs (mission config, personas, charters, evidence fixtures) read by relative path from the repo root. |
@@ -367,8 +366,6 @@ evidence, never repairs.
 | `docs/architecture/pipeline.md` | Stage architecture, phases, and the measurement loop. |
 | `docs/architecture/self-refinement-and-quality.md` | The self-refinement loop and the two check layers. |
 | `docs/guides/pt-shell-guide.md` | **User guide**: install, commands, settings, models, offline mode, measurement, troubleshooting. |
-| `docs/guides/implementation-instructions.md` | Step-by-step execution plan for an implementing agent. |
-| `docs/design/reliability-plan.md` | The design rationale behind this build (workstreams W0–W5). |
 | `docs/design/models.md` | Model catalog for the cross-family study (standard open instructs; abliterated/uncensored ruled out). |
 | `docs/reference/flow-schema.md` | Every JSON contract with examples and business rules. |
 | `docs/reference/model-versions.md` | Frozen Ollama model tags + digests. |
