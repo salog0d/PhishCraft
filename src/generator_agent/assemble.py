@@ -46,7 +46,10 @@ SMS_ANGLES = ("nudge", "new detail", "deadline reminder",
 # small only where the value is a *type* of thing; the numeric/unique parts are
 # derived from the RNG so the combined space is effectively unbounded.
 
-# Document-title atoms, composed per seed into a unique filename.
+# Document-title atoms, composed per seed into a unique filename. Titles are
+# grouped by *pretext domain* so a bank note never cites a finance spreadsheet
+# and a password reset never cites an invoice (the pretext-collapse bug: seeded
+# details were shared by all pretexts, erasing their distinction).
 DOC_SUBJECTS = (
     "reconciliation", "vendor-register", "invoice", "close-checklist",
     "statement", "wire-instructions", "aged-receivables", "payroll-run",
@@ -56,34 +59,52 @@ DOC_SUBJECTS = (
 DOC_QUALIFIERS = ("Q1", "Q2", "Q3", "Q4", "final", "draft", "rev-2", "FY26", "urgent", "updated")
 DOC_EXTS = ("xlsx", "pdf", "csv")
 
+# Pretext domains for the concrete world-details. Each domain names the kind of
+# thing that detail should be, so ``_amount``/``_doc_name``/``_deadline`` stay
+# semantically coherent with the pretext instead of leaking finance terms into
+# every scenario.
+#   consumer-account: a bank/consumer style (no finance spreadsheet).
+_ACCOUNT_DOC_SUBJECTS = ("account", "login", "access", "security", "profile", "billing")
+_ACCOUNT_DOC_QUALIFIERS = ("portal", "notice", "security", "final", "urgent")
+
 # Synthetic time labels composed per seed (deterministic, wide range).
 _HOURS = tuple(f"{h:02d}" for h in range(7, 19))
 _MINUTES = ("00", "15", "30", "45")
 
 
-def _deadline(rng: random.Random) -> str:
+def _deadline(rng: random.Random, pretext: str | None = None) -> str:
     """A concrete, realistic deadline label with wide range.
 
-    Mixes a time-of-day (07:00–18:45), a day anchor, and a named consequence
-    window so distinct seeds read as distinct schedules rather than one of a
-    few fixed strings.
+    The named consequence window is chosen per pretext domain so an
+    account-suspension deadline does not say "before payroll".
     """
-    return (
-        f"{rng.choice(_HOURS)}:{rng.choice(_MINUTES)} "
-        f"{rng.choice(('today', 'tomorrow', 'this week', 'by Friday', 'before payroll'))}"
-    )
+    windows = ("today", "tomorrow", "this week", "by Friday")
+    if pretext in ("account_suspension", "password_reset"):
+        windows = ("today", "immediately", "within 24 hours", "by end of day")
+    elif pretext in ("invoice_payment", "executive_request", "shared_document"):
+        windows = ("today", "tomorrow", "this week", "by Friday", "before payroll")
+    return f"{rng.choice(_HOURS)}:{rng.choice(_MINUTES)} {rng.choice(windows)}"
 
 
-def _amount(rng: random.Random) -> str:
-    """A realistic money amount with wide range, currency + cents varied."""
+def _amount(rng: random.Random, pretext: str | None = None) -> str:
+    """A realistic money amount, or None for pretexts where a figure is
+    incongruous (account_suspension / password_reset)."""
+    if pretext in ("account_suspension", "password_reset"):
+        return ""  # no currency figure for consumer account/security lures
     currency = rng.choice(("$", "US$", "€", "£"))
     whole = rng.randint(1200, 98000)
     cents = rng.randint(0, 99)
     return f"{currency}{whole:,}.{cents:02d}"
 
 
-def _doc_name(rng: random.Random) -> str:
-    """A unique document filename built from seed-derived atoms."""
+def _doc_name(rng: random.Random, pretext: str | None = None) -> str:
+    """A unique document filename built from seed-derived, pretext-aware atoms."""
+    if pretext in ("account_suspension", "password_reset"):
+        return (
+            f"{rng.choice(_ACCOUNT_DOC_SUBJECTS)}-"
+            f"{rng.choice(_ACCOUNT_DOC_QUALIFIERS)}-"
+            f"{rng.randint(1, 40)}.{rng.choice(DOC_EXTS)}"
+        )
     return (
         f"{rng.choice(DOC_SUBJECTS)}-"
         f"{rng.choice(DOC_QUALIFIERS)}-"
@@ -91,13 +112,13 @@ def _doc_name(rng: random.Random) -> str:
     )
 
 
-def variation_axes(seed: int) -> dict:
+def variation_axes(seed: int, pretext: str | None = None) -> dict:
     """Deterministic per-seed variation axes (Fix A).
 
     Injected into ``user_prompt`` so the same cell at different seeds asks the
     model for a different opener/structure/urgency/SMS angle and *different
-    concrete world-details* (deadline, amount, document). Same seed -> same
-    axes -> reproducible.
+    concrete world-details* (deadline, amount, document) that are coherent with
+    the pretext. Same seed + pretext -> same axes -> reproducible.
     """
     rng = random.Random(seed)
     return {
@@ -106,9 +127,9 @@ def variation_axes(seed: int) -> dict:
         "urgency_style": rng.choice(URGENCY_STYLES),
         "sms_angle": rng.choice(SMS_ANGLES),
         "max_body_words": rng.choice((40, 55, 70)),
-        "deadline": _deadline(rng),
-        "amount": _amount(rng),
-        "doc_name": _doc_name(rng),
+        "deadline": _deadline(rng, pretext),
+        "amount": _amount(rng, pretext),
+        "doc_name": _doc_name(rng, pretext),
     }
 
 
@@ -185,7 +206,7 @@ display name: Northwind Accounts Payable
 role: Accounts Payable
 from address: ap@northwind-supplies.example
 subject: Q3 vendor statement available
-body: Good morning Alex, the vendor statement for the third quarter has been posted to the portal and a summary of the outstanding line items is attached to your account record for reconciliation.
+body: The vendor statement for the third quarter has been posted to the portal and a summary of the outstanding line items is attached to your account record for reconciliation.
 scheduled at: 2026-08-20T09:00:00Z
 body: Portal sync complete — a new line item was added late yesterday and is awaiting your review.
 scheduled at: 2026-08-20T10:15:00Z
@@ -365,7 +386,14 @@ def user_prompt(
     # provably differ. Absent seed (legacy path) -> no axes block.
     axes_block = ""
     if seed is not None:
-        axes = variation_axes(seed)
+        axes = variation_axes(seed, pretext=pretext)
+        # The amount line is omitted for pretexts where a currency figure is
+        # incongruous (account_suspension / password_reset), so the prompt
+        # never asks the model to invent one.
+        amount_line = (
+            f"- a concrete amount to reference: {axes['amount']}\n"
+            if axes["amount"] else ""
+        )
         axes_block = (
             f"\nVariation axes for THIS campaign (derived from seed {seed}):\n"
             f"- email opener style: {axes['opener']}\n"
@@ -374,7 +402,7 @@ def user_prompt(
             f"- email body ≤ {axes['max_body_words']} words\n"
             f"- SMS angle: {axes['sms_angle']}\n"
             f"- a concrete deadline to name: {axes['deadline']}\n"
-            f"- a concrete amount to reference: {axes['amount']}\n"
+            f"{amount_line}"
             f"- a concrete document name to cite: {axes['doc_name']}\n"
         )
     return (
