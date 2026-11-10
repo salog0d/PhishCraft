@@ -291,4 +291,4 @@ ADK_MODEL=deepseek/deepseek-chat python -m generator_agent.run \
 | Reliability / reproducibility results | `data/measurements/…` |
 | Mission config | `config/q3-awareness-2026.mission.json` |
 | Personas | `org/fantazylabz_org.json` + `org/external_personas.json` |
-| Design & contracts | `docs/architecture.md` · `docs/flow-schema.md` |
+| Design & contracts | `docs/architecture/pipeline.md` · `docs/reference/flow-schema.md` · `docs/reference/org-chart.md` |

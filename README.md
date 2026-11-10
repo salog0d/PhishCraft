@@ -233,7 +233,7 @@ env var). All commands work with or without the leading slash.
 python -m ptshell
 ```
 
-**Full usage guide:** [`docs/pt-shell-guide.md`](./docs/pt-shell-guide.md).
+**Full usage guide:** [`docs/guides/pt-shell-guide.md`](./docs/guides/pt-shell-guide.md).
 
 | Command | What it does |
 |---------|--------------|
@@ -271,7 +271,7 @@ All source packages now live under `src/` (the standard `src` layout); the
 | `requirements.txt` | Pinned dependencies (`google-adk`, `litellm`, `fastapi`, `pydantic`, …). |
 | `pyproject.toml` | Package metadata + build config (`src/` layout) and pytest config. |
 | `compose.yaml` | Local MailHog SMTP sink used by `--send` (delivery sandbox). |
-| `implementation-instructions.md` | Step-by-step execution plan (ADK pipeline + measurement) for an implementing agent. |
+| `implementation-instructions.md` | Step-by-step execution plan (ADK pipeline + measurement) for an implementing agent — now at `docs/guides/implementation-instructions.md`. |
 | `.gitignore` | Excludes `venv/`, caches, `.env`, and other non-versioned files. |
 | `src/` | All Python packages (`agent`, `app`, `generator_agent`, `measurement`, `monitoring`, `ptshell`, `quality_agent`, `validator_agent`) and `tests`. |
 | `config/`, `org/`, `prompts/`, `data/` | Non-code inputs (mission config, personas, charters, evidence fixtures) read by relative path from the repo root. |
@@ -349,8 +349,8 @@ evidence, never repairs.
 |------|------------------------------|
 | `org/fantazylabz_org.json` | The 12-person internal roster (BEC-relevant roles). |
 | `org/external_personas.json` | External BEC impersonation sources: a supplier, a bank, and a carrier (`.example` domains). |
-| `org/fantazylabz_org.md` | Human-readable roster by department. |
-| `org/fantazylabz_org_graph.md` | Org chart (Mermaid + text tree). |
+| `docs/reference/org-chart.md` | Human-readable roster by department. |
+| `docs/reference/org-chart-graph.md` | Org chart (Mermaid + text tree). |
 
 ### `prompts/` — stage charters
 
@@ -360,16 +360,20 @@ evidence, never repairs.
 | `prompts/validator_ag.md` | Documentation-parity charter for the 5 checks; the code module is authoritative. |
 | `prompts/orchestrator_ag.md` | Non-executable design note: the orchestrator is the ADK `SequentialAgent`. |
 
-### `docs/` — documentation
+### `docs/` — documentation (organized into five sections)
 
 | File | What it is / why it matters |
 |------|------------------------------|
-| `docs/architecture.md` | Stage architecture, phases, and the measurement loop. |
-| `docs/pt-shell-guide.md` | **User guide**: install, commands, settings, models, offline mode, measurement, troubleshooting. |
-| `docs/flow-schema.md` | Every JSON contract with examples and business rules. |
-| `docs/generator-reliability-plan.md` | The design rationale behind this build (workstreams W0–W5). |
-| `docs/models.md` | Model catalog for the cross-family study (standard open instructs; abliterated/uncensored ruled out). |
-| `docs/README.md` | Docs index. |
+| `docs/architecture/pipeline.md` | Stage architecture, phases, and the measurement loop. |
+| `docs/architecture/self-refinement-and-quality.md` | The self-refinement loop and the two check layers. |
+| `docs/guides/pt-shell-guide.md` | **User guide**: install, commands, settings, models, offline mode, measurement, troubleshooting. |
+| `docs/guides/implementation-instructions.md` | Step-by-step execution plan for an implementing agent. |
+| `docs/design/reliability-plan.md` | The design rationale behind this build (workstreams W0–W5). |
+| `docs/design/models.md` | Model catalog for the cross-family study (standard open instructs; abliterated/uncensored ruled out). |
+| `docs/reference/flow-schema.md` | Every JSON contract with examples and business rules. |
+| `docs/reference/model-versions.md` | Frozen Ollama model tags + digests. |
+| `docs/reference/org-chart.md` · `org-chart-graph.md` | Human-readable org roster and chart. |
+| `docs/README.md` | Docs index (the entry point to the five sections). |
 
 ### `ptshell/` — PhishCraft, the interactive harness (Claude-Code-style REPL)
 
@@ -399,19 +403,20 @@ evidence, never repairs.
 | `data/measurements/reproduce-adk/` | Reproducibility results (seed 42 run twice, byte-identical). |
 | `data/measurements/reproduce-adk-fixed/` | Post-fix reproducibility: deterministic layer identical; prose varies between provider calls at temperature 0. |
 | `data/measurements/reliability-adk-*/` | Reliability results (`reliability.json` + `summary.md`: raw + post-assembler failure tables). |
-| `data/measurements/README.md` | **How to read the numbers**: raw vs post-assembler metrics, actual sampling params, known gaps. |
+| `data/measurements/README.md` | **How to read the numbers**: raw vs post-assembler metrics, actual sampling params, known gaps — now at `docs/measurements/README.md`. |
 
 ---
 
 ## Documentation
 
 - **Documentation home:** [`docs/`](./docs/README.md)
-- **Interactive shell guide:** [`docs/pt-shell-guide.md`](./docs/pt-shell-guide.md)
-- **Architecture & pipeline design:** [`docs/architecture.md`](./docs/architecture.md)
-- **Data contracts (JSON):** [`docs/flow-schema.md`](./docs/flow-schema.md)
-- **Model catalog (cross-family study):** [`docs/models.md`](./docs/models.md)
+- **Interactive shell guide:** [`docs/guides/pt-shell-guide.md`](./docs/guides/pt-shell-guide.md)
+- **Architecture & pipeline design:** [`docs/architecture/pipeline.md`](./docs/architecture/pipeline.md)
+- **Self-refinement & quality checks:** [`docs/architecture/self-refinement-and-quality.md`](./docs/architecture/self-refinement-and-quality.md)
+- **Data contracts (JSON):** [`docs/reference/flow-schema.md`](./docs/reference/flow-schema.md)
+- **Model catalog (cross-family study):** [`docs/design/models.md`](./docs/design/models.md)
 - **Local models on Ollama (RTX 3070):** [README section](#local-models-with-ollama-nvidia-geforce-rtx-3070)
-- **Lab notebook:** [`docs/bitacora.md`](./docs/bitacora.md)
+- **Lab notebook:** [`docs/design/bitacora.md`](./docs/design/bitacora.md)
 - **Architecture diagrams:** [`diagrams_output/`](./diagrams_output/) — regenerate with `python3 scripts/generate_diagrams.py`
 - **API reference:** available at `/docs` when the service is running.
 
@@ -464,7 +469,7 @@ reproducibility seed, and the ethics guardrails.
 LLM-ops monitoring for every campaign and LLM call: token usage, call
 latency, retries, quality/coherence findings, and GPU/VRAM state — with
 alerts routed into the MailHog sink. See
-[`monitoring/README.md`](./monitoring/README.md).
+[`docs/reference/monitoring.md`](./docs/reference/monitoring.md).
 
 ```bash
 ./monitoring/start.sh

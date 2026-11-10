@@ -4,7 +4,7 @@
 Context: controlled research investigation. The diagrams describe the
 three-stage Google ADK pipeline (generate -> assemble -> verify) plus the
 measurement harness -- boxes, arrows, phases only; no operational tooling.
-The content mirrors ``docs/architecture.md``.
+The content mirrors ``docs/architecture/pipeline.md``.
 
 Environment setup
 -----------------

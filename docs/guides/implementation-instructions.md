@@ -24,7 +24,7 @@
 > **Do not** "fix" the generator so the known link bug disappears. That bug is
 > the first data point; the deliverable is the validator that detects it.
 >
-> Rationale and design notes: [`docs/generator-reliability-plan.md`](./docs/generator-reliability-plan.md).
+> Rationale and design notes: [`docs/design/reliability-plan.md`](../design/reliability-plan.md).
 > This file is the operative step list; the design doc is the reference.
 
 ---
@@ -1073,7 +1073,7 @@ python -m measurement.reliability --adapter adk --runs 1
 
 ## 12. Reference
 
-- Design rationale: [`docs/generator-reliability-plan.md`](./docs/generator-reliability-plan.md)
+- Design rationale: [`docs/design/reliability-plan.md`](../design/reliability-plan.md)
 - ADK docs: <https://adk.dev/> · source: <https://github.com/google/adk-python>
 - Known finding (F3) evidence: `data/q3-awareness-2026/generated_campaign.json`
   (preserved copy: `data/measurements/known-case/generated_campaign.json`)

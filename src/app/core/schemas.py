@@ -31,7 +31,7 @@ This module is the single source of truth for the system's data contracts:
   post-run content-quality scan (generation artifacts, contamination, automated
   label audit, stage-direction stripping stats) as evidence — never repairs.
 * The remaining **flow contracts** — one model per hand-off between stages
-  (documented in ``docs/flow-schema.md``) — each carrying a
+  (documented in ``docs/reference/flow-schema.md``) — each carrying a
   ``PersistencePolicy`` describing how its artifacts may be stored.
 """
 
@@ -683,7 +683,7 @@ class QualityReport(BaseModel):
 
 
 # =========================================================================== #
-# Flow contracts (see docs/flow-schema.md)
+# Flow contracts (see docs/reference/flow-schema.md)
 # =========================================================================== #
 
 

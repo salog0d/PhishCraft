@@ -8,15 +8,53 @@ Welcome to the documentation for **PhishCraft**, a configurable, reproducible **
 
 ## Contents
 
+The docs are organized into five sections.
+
+### Architecture — how it is built
+
 | Document | Description |
 |----------|-------------|
-| [PhishCraft User Guide](./pt-shell-guide.md) | **How to use the tool**: install, launch, commands, settings, models, offline mode, measurement, troubleshooting. |
-| [Architecture](./architecture.md) | Stage roles (ADK pipeline), phases, and the measurement loop. |
-| [Flow Schema](./flow-schema.md) | JSON data contracts for every hand-off across the pipeline. |
-| [Model catalog](./models.md) | Cross-family study candidates (standard open instructs; what was ruled out and why). |
-| [Generator reliability plan](./generator-reliability-plan.md) | The design rationale behind the current build (workstreams W0–W5) + the Oct-2026 review addendum. |
-| [Measurement results](../data/measurements/README.md) | **How to read the numbers** (raw vs post-assembler, actual params, known gaps). |
-| [Bitácora](./bitacora.md) | Lab notebook: dated findings, decisions, and open questions. |
+| [Pipeline](./architecture/pipeline.md) | Stage roles (ADK pipeline), phases, and the measurement loop. |
+| [Self-refinement & quality checks](./architecture/self-refinement-and-quality.md) | The Reflexion-style refinement loop (DeepSeek critic) and the two check layers. |
+
+### Design — why it was built this way
+
+| Document | Description |
+|----------|-------------|
+| [Model catalog](./design/models.md) | Cross-family study candidates (standard open instructs; what was ruled out and why). |
+| [Generator reliability plan](./design/reliability-plan.md) | The design rationale behind the current build (workstreams W0–W5) + the Oct-2026 review addendum. |
+| [Bitácora](./design/bitacora.md) | Lab notebook: dated findings, decisions, and open questions. |
+| [Repository audit](./design/audit.md) | One-shot audit of the codebase: findings and their status. |
+
+### Guides — how to use and extend it
+
+| Document | Description |
+|----------|-------------|
+| [PhishCraft User Guide](./guides/pt-shell-guide.md) | **How to use the tool**: install, launch, commands, settings, models, offline mode, measurement, troubleshooting. |
+| [Implementation instructions](./guides/implementation-instructions.md) | Step-by-step execution plan (ADK pipeline + measurement) for an implementing agent. |
+
+### Reference — contracts and data
+
+| Document | Description |
+|----------|-------------|
+| [Flow schema](./reference/flow-schema.md) | JSON data contracts for every hand-off across the pipeline. |
+| [Model versions (frozen)](./reference/model-versions.md) | Frozen Ollama tags + SHA256 digests for reproducibility. |
+| [Org chart](./reference/org-chart.md) | The 12-person internal roster, human-readable. |
+| [Org chart (graph)](./reference/org-chart-graph.md) | Org chart (Mermaid + text tree). |
+| [Monitoring](./reference/monitoring.md) | Observability stack: Grafana + Prometheus + Alertmanager. |
+
+### Measurements — how to read the results
+
+| Document | Description |
+|----------|-------------|
+| [Measurement results](./measurements/README.md) | **How to read the numbers** (raw vs post-assembler, actual params, known gaps). |
+
+---
+
+Other entry points:
+
+| Link | Description |
+|------|-------------|
 | [Diagrams](../diagrams_output/) | Rendered architecture diagrams (PNG, 300 DPI). |
 | [Project README](../README.md) | Installation, quick start, project structure, and configuration. |
 
@@ -33,8 +71,8 @@ The pipeline is a **Google ADK** agent graph — a linear, non-autonomous
 | `assembler_agent` | ADK `BaseAgent` (deterministic) | Builds the `GeneratedCampaign`: ids, persona (deterministically selected per pretext × recipient), seed-derived tracking link, schedule, references, provenance. |
 | `validator_agent` | ADK `BaseAgent` (deterministic) | Runs the five coherence checks (persona, timing, reference existence, link consistency, sender-recipient separation) and emits the `CoherenceReport`. |
 
-See [architecture.md](./architecture.md) for the full pipeline, per-phase outputs,
-and the stage communication diagram.
+See [architecture/pipeline.md](./architecture/pipeline.md) for the full pipeline,
+per-phase outputs, and the stage communication diagram.
 
 ---
 
@@ -52,7 +90,7 @@ Phase 3  Measurement (harness)      → reproducibility.json + reliability.json 
 ## Working with the docs
 
 - **Use the tool interactively:** `python -m ptshell` — see the
-  [PhishCraft User Guide](./pt-shell-guide.md).
+  [PhishCraft User Guide](./guides/pt-shell-guide.md).
 - **Architecture diagrams** are generated from code. Regenerate them after editing the pipeline:
 
   ```bash

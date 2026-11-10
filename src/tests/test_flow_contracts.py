@@ -1,7 +1,7 @@
 """Business-rule and persistence-rule tests for the generator contracts.
 
 Each test states one scenario and its expected outcome. Valid payloads mirror
-the examples in ``docs/flow-schema.md``; invalid payloads assert that a specific
+the examples in ``docs/reference/flow-schema.md``; invalid payloads assert that a specific
 business rule is enforced. The project is a *campaign generator*: the tests
 cover constraint satisfaction, model-family policy, coherence, and provenance —
 not victim interaction or campaign KPIs (those are out of scope).

@@ -187,4 +187,4 @@ feedback, no autonomy, no optimization loop.
   content only and never touches ids, persona, URLs, references, or schedule.
 - All contracts are defined and validated by Pydantic v2 models in
   [`app/core/schemas.py`](../app/core/schemas.py); the hand-off shapes are
-  documented in [`flow-schema.md`](./flow-schema.md).
+  documented in [`flow-schema.md`](../reference/flow-schema.md).

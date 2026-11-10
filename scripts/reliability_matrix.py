@@ -66,7 +66,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 # Design constants
 # --------------------------------------------------------------------------- #
 
-# Frozen model tags (see docs/model-versions.md). Never ``latest``: these are
+# Frozen model tags (see docs/reference/model-versions.md). Never ``latest``: these are
 # immutable `ollama cp` snapshots so the whole matrix is reproducible.
 DEFAULT_MODELS = (
     "qwen3:8b-q4km-20261110",        # 8.2B Q4_K_M — sha256 a3de86cd…

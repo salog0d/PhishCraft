@@ -6,7 +6,7 @@
 > (charter no longer hardcodes the `abc123` example token; the deterministic
 > assembler normalizes body links; the driver retries placeholder echoes) and
 > re-measured: violations dropped from 10/10 to 0/10. See
-> [`data/measurements/README.md`](../data/measurements/README.md) for the
+> [`data/measurements/README.md`](../measurements/README.md) for the
 > before/after tables.
 
 > **Review addendum (Oct 2026).** A design review found three problems with
@@ -27,7 +27,7 @@
 >    run is preserved as `known-case/ceo_self_impersonation.json` with a
 >    regression test. What the suite cannot detect is itself a result.
 >
-> Details in [`data/measurements/README.md`](../data/measurements/README.md)
+> Details in [`data/measurements/README.md`](../measurements/README.md)
 > and the [bitácora](./bitacora.md).
 
 > **Self-refinement addendum (Oct 2026).** The generator now *repairs* its own

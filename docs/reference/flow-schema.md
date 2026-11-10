@@ -462,5 +462,5 @@ CampaignSpec + PersonaCatalog┘        │ raw_bindings
                               reliability + quality) · ptshell
 ```
 
-See [architecture.md](./architecture.md) for the stage roles and phase
+See [architecture/pipeline.md](../architecture/pipeline.md) for the stage roles and phase
 descriptions.
