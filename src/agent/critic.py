@@ -13,6 +13,10 @@ tokens, schedule, provenance) is never touched.
 
 from __future__ import annotations
 
+import json
+import os
+import time
+
 from google.adk.models import LlmRequest
 from google.genai import types
 
@@ -98,11 +102,43 @@ async def critique_campaign(campaign, report, quality) -> str | None:
         # models (deepseek-r1) split their thinking into ``thought=True`` parts;
         # keep only the answer — the critique must not carry the preamble.
         text = ""
+        start = time.monotonic()
+        final_response = None
         async for response in model.generate_content_async(llm_request=request):
+            final_response = response
             content = getattr(response, "content", None)
             for part in getattr(content, "parts", None) or []:
                 if getattr(part, "text", None) and not getattr(part, "thought", False):
                     text += part.text
     except Exception:
         return None  # never break the pipeline over critique bookkeeping
+    _trace_critic(model, final_response, time.monotonic() - start)
     return text.strip() or None
+
+
+def _trace_critic(model, response, duration_s: float) -> None:
+    """Append the critic call to ``ADK_MODEL_TRACE_FILE`` (same shape as the
+    generator's trace) so token/latency totals include the model that proposes
+    corrections. No-op when tracing is disabled."""
+    path = os.getenv("ADK_MODEL_TRACE_FILE")
+    if not path:
+        return
+    usage = getattr(response, "usage_metadata", None) if response is not None else None
+    record = {
+        "seq": None,
+        "agent": "critic",
+        "model": getattr(model, "model", None),
+        "duration_s": round(duration_s, 3),
+        "response": {
+            "usage": {
+                "prompt_tokens": getattr(usage, "prompt_token_count", None),
+                "completion_tokens": getattr(usage, "candidates_token_count", None),
+                "total_tokens": getattr(usage, "total_token_count", None),
+            },
+        },
+    }
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError:
+        pass

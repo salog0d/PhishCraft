@@ -206,3 +206,84 @@ Revisión del mentor sobre los resultados centrales. Resumen y resolución:
 - [ ] Decidir licencia (README marca "TBD").
 - [ ] Considerar `seed` soportado por el proveedor para prosa reproducible
       (hoy `seed_supported: false` es el resultado honesto).
+
+---
+
+## 2026-11-09 — Matriz de sensibilidad de confiabilidad (diseño de David)
+
+Script `scripts/reliability_matrix.py` que implementa el análisis de
+sensibilidad del generador: cuánto varía el cumplimiento de restricciones
+entre modelos y temperaturas, y cuánto esfuerzo requiere el sistema para
+entregar una campaña válida.
+
+### Matriz del experimento
+
+| Eje | Valores |
+|-----|---------|
+| **Modelos** | `qwen3:8b` (`500a1f067a9f`), `llama3.1:8b` (`46e0c10c039e`), `phi4-mini:latest` (`78fad5d182a7`) |
+| **Temperaturas** | 0.0, 0.5, 1.0 |
+| **Casos** | 12 fijos (3 specs × 4 pretextos de base) |
+| **Repeticiones** | 3 por combinación, semillas 101/202/303 (iguales entre condiciones) |
+| **Límite de salida** | 4096 tokens por llamada al generador |
+
+Total: 3 modelos × 3 temperaturas × 12 casos × 3 semillas = **324 ejecuciones**.
+El caso permanece fijo (mismo destinatario, contexto, entidades, restricciones
+y requisitos de contenido); entre ejecuciones solo cambian modelo, temperatura
+y semilla; cada ejecución arranca en sesión nueva.
+
+**Cuatro pretextos base** (implementados, con persona determinista en
+`persona_for`): `executive_request`, `invoice_payment` (BEC) y
+`account_suspension`, `password_reset` (consumer). 3 spec por pretexto =
+casos C01–C12, con destinatario fijo por spec (todos los modelos reciben el
+**mismo** caso y destinatario).
+
+### Definición de métricas (por ejecución)
+
+- **`status`**: `ok` | `timeout` | `generation_error`. Los fallos/timeouts se
+  cuentan aparte; el cumplimiento se calcula **solo sobre campañas
+  completadas**, y así se aclara en el reporte.
+- **`first_raw_response`**: primera respuesta del modelo, tomada del
+  `llm_trace.jsonl`, **aunque tenga errores de formato**. Separada de la
+  primera respuesta que el programa logra parsear y de la versión final.
+  (Nota: el driver reintenta hasta 3 veces y luego refina; el trace registra
+  cada llamada, así que la primera línea del trace es esa primera respuesta.)
+- **`n_attempts` / `refined` / `raw_link_violations`**: intentos, si hubo
+  refinamiento, y tokens de tracking obsoletos que el modelo escribió (métrica
+  raw pre-ensamblador).
+- **`generator_calls` / `critic_calls`**: llamadas LLM del generador y del
+  critic (el modelo que propone correcciones, `deepseek-r1:7b`).
+- **`total_tokens` / `duration_ms`**: tokens totales (incluyendo al critic) y
+  tiempo de pared de la ejecución completa.
+- **`failing_checks`**: checks de coherencia (validador determinista) que no
+  pasan.
+- **`quality`**: flags del quality scan (artefactos + contaminación + label
+  audit) sobre el artefacto entregado.
+
+Capa determinista vs prosa se comparan **por separado** en la reproducibilidad
+(`--repro`): hash de la capa determinista (persona, URLs, ids, schedule,
+provenance — con subject/body borrados) vs hash completo vs igualdad del texto.
+
+### Cambios de código para el estudio
+
+- `agent/pipeline.py`: `_generation_config` ahora mapea `seed` → `seed`, de
+  modo que la semilla **sí viaja al proveedor** (antes solo alimentaba el
+  token determinista de la URL y el hash del prompt; `seed_supported` era
+  `false`). Verificado con Ollama 0.22.1: a temperatura 0 la misma semilla da
+  salida idéntica.
+- `agent/critic.py`: el critic ahora apunta al mismo `ADK_MODEL_TRACE_FILE`
+  con `agent="critic"` y su `usage_metadata`, para que el total de tokens
+  incluya al modelo que propone correcciones (antes no se trazaba).
+
+### Verificación previa a la corrida
+
+`python scripts/reliability_matrix.py --verify` consulta `/api/generate` con
+`temperature`/`seed`/`num_predict` y confirma que el proveedor devuelve salida
+idéntica a `seed` fijo en temperatura 0 (el parámetro llega, no se descarta).
+
+### Hallazgo de reproducibilidad (preliminar)
+
+Re-ejecutando una ejecución con config/semilla idénticas: la capa
+determinista es byte-idéntica (`deterministic_hash_identical: true`) pero la
+prosa varía (`prose_identical: false`) incluso a temperatura 0, **a pesar de
+que el seed sí llega a Ollama**. El no-determinismo de prosa viene del
+proveedor. Es un resultado, no un error.

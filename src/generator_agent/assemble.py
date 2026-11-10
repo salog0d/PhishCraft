@@ -35,12 +35,68 @@ URGENCY_STYLES = ("deadline named explicitly", "deadline implied",
 SMS_ANGLES = ("nudge", "new detail", "deadline reminder",
               "channel-switch acknowledgement")
 
+# [FIX G] Concrete world-details derived from the seed. A greedy/low-temp model
+# reproduces concrete data verbatim far more reliably than it obeys an abstract
+# "opener style" instruction, so these are the actual variety carriers.
+#
+# The concrete values are *synthesized out of the seed* rather than picked from
+# short fixed lists, so two seeds produce recognisably different details instead
+# of permuting the same handful of constants (the "15-word vocabulary" collapse).
+# Same seed -> same details -> reproducible. Component pools below are kept
+# small only where the value is a *type* of thing; the numeric/unique parts are
+# derived from the RNG so the combined space is effectively unbounded.
+
+# Document-title atoms, composed per seed into a unique filename.
+DOC_SUBJECTS = (
+    "reconciliation", "vendor-register", "invoice", "close-checklist",
+    "statement", "wire-instructions", "aged-receivables", "payroll-run",
+    "purchase-order", "contract", "expense-report", "tax-payment",
+    "refund-batch", "supplier-KYC", "board-pack",
+)
+DOC_QUALIFIERS = ("Q1", "Q2", "Q3", "Q4", "final", "draft", "rev-2", "FY26", "urgent", "updated")
+DOC_EXTS = ("xlsx", "pdf", "csv")
+
+# Synthetic time labels composed per seed (deterministic, wide range).
+_HOURS = tuple(f"{h:02d}" for h in range(7, 19))
+_MINUTES = ("00", "15", "30", "45")
+
+
+def _deadline(rng: random.Random) -> str:
+    """A concrete, realistic deadline label with wide range.
+
+    Mixes a time-of-day (07:00–18:45), a day anchor, and a named consequence
+    window so distinct seeds read as distinct schedules rather than one of a
+    few fixed strings.
+    """
+    return (
+        f"{rng.choice(_HOURS)}:{rng.choice(_MINUTES)} "
+        f"{rng.choice(('today', 'tomorrow', 'this week', 'by Friday', 'before payroll'))}"
+    )
+
+
+def _amount(rng: random.Random) -> str:
+    """A realistic money amount with wide range, currency + cents varied."""
+    currency = rng.choice(("$", "US$", "€", "£"))
+    whole = rng.randint(1200, 98000)
+    cents = rng.randint(0, 99)
+    return f"{currency}{whole:,}.{cents:02d}"
+
+
+def _doc_name(rng: random.Random) -> str:
+    """A unique document filename built from seed-derived atoms."""
+    return (
+        f"{rng.choice(DOC_SUBJECTS)}-"
+        f"{rng.choice(DOC_QUALIFIERS)}-"
+        f"{rng.randint(1, 40)}.{rng.choice(DOC_EXTS)}"
+    )
+
 
 def variation_axes(seed: int) -> dict:
     """Deterministic per-seed variation axes (Fix A).
 
     Injected into ``user_prompt`` so the same cell at different seeds asks the
-    model for a different opener/structure/urgency/SMS angle. Same seed -> same
+    model for a different opener/structure/urgency/SMS angle and *different
+    concrete world-details* (deadline, amount, document). Same seed -> same
     axes -> reproducible.
     """
     rng = random.Random(seed)
@@ -50,6 +106,9 @@ def variation_axes(seed: int) -> dict:
         "urgency_style": rng.choice(URGENCY_STYLES),
         "sms_angle": rng.choice(SMS_ANGLES),
         "max_body_words": rng.choice((40, 55, 70)),
+        "deadline": _deadline(rng),
+        "amount": _amount(rng),
+        "doc_name": _doc_name(rng),
     }
 
 
@@ -101,6 +160,8 @@ Anti-repetition block (the negative space is named on purpose):
   "action required", or "confirm" in any subject.
 - Do not reuse the opening verb of any example below.
 - Vary sentence count between the email and the SMS in the same campaign.
+- Never echo a bracketed or angle-bracketed placeholder such as `[EMAIL_BODY]`,
+  `<recipient first name>`, or `<persona>` — always substitute the real value.
 
 ---
 ### Few‑Shot Examples  [contrastive — they share nothing lexically]
@@ -112,7 +173,11 @@ phrasing**; copy their *shape*.
 Each example below is written in the EXACT output format you must use: 8 flat
 lines, one ``label: value`` pair per line, in this order — ``display name``,
 ``role``, ``from address``, ``subject``, ``body``, ``scheduled at``, ``body``,
-``scheduled at``. No JSON, no markdown, no headers, no extra text.
+``scheduled at``. No JSON, no markdown, no headers, no extra text. Write each
+of the two ``body`` values as a single unbroken paragraph — no ``\n`` and no
+line breaks inside a body. The names, subjects and bodies below are examples
+only: never copy them, replace every concrete value in them with the values
+from the user message.
 
 **Example 1 — email then SMS, pretext: invoice_payment, tone: formal, difficulty: easy**
 ```
@@ -120,7 +185,7 @@ display name: Northwind Accounts Payable
 role: Accounts Payable
 from address: ap@northwind-supplies.example
 subject: Q3 vendor statement available
-body: Good morning <recipient first name>,\n\nThe vendor statement for the third quarter has been posted to the portal. A summary of the outstanding line items is attached to your account record for reconciliation.
+body: Good morning Alex, the vendor statement for the third quarter has been posted to the portal and a summary of the outstanding line items is attached to your account record for reconciliation.
 scheduled at: 2026-08-20T09:00:00Z
 body: Portal sync complete — a new line item was added late yesterday and is awaiting your review.
 scheduled at: 2026-08-20T10:15:00Z
@@ -144,7 +209,7 @@ display name: Elena Marchetti
 role: Chief Executive Officer
 from address: elena.marchetti@fantazylabz.tech
 subject: One item in tomorrow's board pack needs your sign-off
-body: One item in tomorrow's board pack still needs your sign-off. The summary is behind the button; the window closes at 09:00 tomorrow.\n\nI need this back before the audit committee convenes — no delegation on this one.\n\n{{cta-link}}
+body: One item in tomorrow's board pack still needs your sign-off; the summary is behind the button and the window closes at 09:00 tomorrow. I need this back before the audit committee convenes — no delegation on this one — {{cta-link}}
 scheduled at: 2026-08-21T07:15:00Z
 body: Sign-off received on the other items — this one still shows open on my side. Confirm via the link before 09:00.
 scheduled at: 2026-08-21T08:00:00Z
@@ -154,7 +219,7 @@ scheduled at: 2026-08-21T08:00:00Z
 
 **Your Task:**
 1. Receive one validated `PhishingGenerationRequest` (channel, recipient, sender/persona, pretext, call_to_action, `model`, `params` with `seed`) and the referenced seed prompt template.
-2. Write the email `subject` and `body`, and the SMS `body`, in the requested `tone`, `difficulty`, and `language`, personalized to the recipient, obeying the variation axes for this campaign (given in the user message).
+2. Write the email `subject` and `body`, and the SMS `body`, in the requested `tone`, `difficulty`, and `language`, personalized to the recipient, obeying the variation axes for this campaign (given in the user message). Weave the concrete deadline, amount, and document name from the axes into the prose so they read as real, distinct details — never leave them out and never invent a different one.
 3. Answer in the EXACT 8-line ``label: value`` format shown above — ``display name``, ``role``, ``from address``, ``subject``, ``body``, ``scheduled at``, ``body``, ``scheduled at`` — no JSON, no markdown, no headers, no commentary.
 4. Echo the impersonated persona byte‑for‑byte in the first three lines; the second ``body`` (SMS) must advance the thread, not restate the email.
 5. Where the link should appear, write exactly the placeholder ``{{cta-link}}`` — never a URL or tracking token.
@@ -170,6 +235,12 @@ CTA_BY_PRETEXT = {
     "executive_request": ("click_link", "Review Summary"),
     "shared_document": ("click_link", "Open Document"),
     "account_suspension": ("enter_credentials", "Reactivate Account"),
+    "bank_detail_change": ("click_link", "Update Bank Details"),
+    "account_compromise": ("click_link", "View Request"),
+    "attorney_impersonation": ("click_link", "Open File"),
+    "data_theft": ("open_attachment", "Open Attachment"),
+    "payroll_diversion": ("click_link", "Update Deposit Details"),
+    "gift_card": ("click_link", "View Instruction"),
 }
 
 # Bindings the LMQL query must produce, in order.
@@ -302,6 +373,9 @@ def user_prompt(
             f"- urgency style: {axes['urgency_style']}\n"
             f"- email body ≤ {axes['max_body_words']} words\n"
             f"- SMS angle: {axes['sms_angle']}\n"
+            f"- a concrete deadline to name: {axes['deadline']}\n"
+            f"- a concrete amount to reference: {axes['amount']}\n"
+            f"- a concrete document name to cite: {axes['doc_name']}\n"
         )
     return (
         f"Campaign {mission_config['campaign_id']}, pretext={pretext}, "
@@ -476,10 +550,10 @@ def assemble_campaign(
 
     # The generation params recorded in provenance: the spec's params (if any)
     # merged with the seed that drove the deterministic layer. When the spec
-    # carries no params, temperature falls back to the adapter's default (0.0
-    # in agent.config), and top_p/max_tokens are the provider defaults.
+    # carries no params, temperature falls back to the adapter's default (0.9
+    # in agent.pipeline), and top_p/max_tokens are the provider defaults.
     prov_params = dict(generation_params)
-    prov_params.setdefault("temperature", 0.0)
+    prov_params.setdefault("temperature", 0.9)
     prov_params["seed"] = seed
 
     messages = [

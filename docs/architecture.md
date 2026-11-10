@@ -102,8 +102,10 @@ pipeline measurable for reproducibility.
   real landing URL.
 - **Seed-derived variation axes**: the seed reshapes the instruction, not just
   the tracking token. `variation_axes(seed)` derives an opener style, body
-  structure, urgency style, a word budget, and an SMS angle, injected into the
-  user message so two seeds provably produce different generation constraints.
+  structure, urgency style, a word budget, an SMS angle, and concrete
+  world-details (deadline, amount, document name) synthesized from the seed so
+  two seeds produce recognisably different generation constraints; the same
+  seed reproduces the same details.
 - **Per-run generation params**: the spec's `params` block
   (`temperature`/`top_p`/`max_tokens`) is turned into a `GenerateContentConfig`
   by `agent.pipeline.build_pipeline`, so sampling behaviour is a per-run axis

@@ -22,3 +22,7 @@ data/measurements/_*
 
 # Experiment outputs (generated data, kept out of version control)
 experiment/variety-*/
+experiment/reliability-*/
+experiment/*.log
+data/bec-bank_detail_change-*/
+review.md
