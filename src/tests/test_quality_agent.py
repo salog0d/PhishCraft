@@ -119,6 +119,31 @@ def test_dirty_campaign_flags_generation_artifacts():
     assert report.any_flag is True
 
 
+def test_greeting_to_wrong_name_flags_dialogue_collapse():
+    """A greeting to a name outside the roster (few-shot leak, e.g. 'Alex')
+    must flag dialogue_collapse, and a correct recipient greeting must not."""
+    from quality_agent.artifacts import scan_dialogue_collapse
+
+    names = ("Rebecca Stern", "Samuel Adeyemi", "Gregory Whitfield")
+    leaked = scan_dialogue_collapse(
+        "Good morning Alex, the vendor statement is ready.",
+        field="email_body",
+        persona_name="Samuel Adeyemi",
+        recipient_name="Rebecca Stern",
+        known_names=names,
+    )
+    assert any("'Alex'" in f.detail for f in leaked)
+
+    ok = scan_dialogue_collapse(
+        "Good morning Rebecca, the statement is ready.",
+        field="email_body",
+        persona_name="Samuel Adeyemi",
+        recipient_name="Rebecca Stern",
+        known_names=names,
+    )
+    assert ok == []
+
+
 def test_dirty_campaign_flags_contamination_and_script():
     report = scan_campaign(_campaign(_dirty_bindings()), spec=SPEC)
     by_check = _by_check(report)

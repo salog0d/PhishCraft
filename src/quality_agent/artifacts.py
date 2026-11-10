@@ -46,7 +46,9 @@ LIMITS = {
     "sms_body": {"soft_max": 480, "floor": 15},
 }
 
-_GREETING = re.compile(r"(?im)^(hi|hello|dear)\s+([A-Z][A-Za-z.' -]{1,40})")
+_GREETING = re.compile(
+    r"(?im)^(?:hi|hello|dear|good\s+(?:morning|afternoon|evening))\s+([A-Z][A-Za-z.' -]{1,40})"
+)
 _SIGNOFF_DASH = re.compile(r"(?m)^\s*[-—–]\s*([A-Z][A-Za-z.' -]{1,40})\s*$")
 _SIGNOFF_VALEDICTION = re.compile(
     r"(?im)^\s*(best regards|best|regards|sincerely|warm regards|thanks|"
@@ -109,20 +111,44 @@ def scan_dialogue_collapse(
                 detail=f"valediction signed as '{name}', which is neither the "
                        f"persona nor the recipient",
             ))
+    # Greetings that address a proper name are only valid when that name is the
+    # recipient (or, in a reply-like echo, the persona). A greeting to anyone
+    # else — including a name leaked from the few-shot examples, e.g. "Alex" —
+    # is role confusion even though the name is not in the roster.
     for match in _GREETING.finditer(text):
-        name = match.group(2).strip()
+        name = match.group(1).strip()
         lowered = name.casefold()
-        if lowered in exclude:
+        # Strip an honorific so "Mr. Whitfield" matches recipient "Whitfield".
+        tokens = [t for t in name.split() if t.rstrip(".").casefold()
+                  not in {"mr", "mrs", "ms", "miss", "dr", "prof"}]
+        first = tokens[0].casefold() if tokens else name.casefold()
+        # Personal/collective salutations carry no wrong-identity name.
+        if lowered in exclude or first in {
+            "there", "sir", "madam", "ma'am", "customer", "team",
+            "all", "colleague", "colleagues",
+        }:
             continue
-        if _name_in(name, known_names, set()):
-            who = "the impersonated persona" if lowered == persona_first.casefold() \
-                else "someone other than the recipient"
-            findings.append(QualityFinding(
-                check="dialogue_collapse",
-                field=field,
-                excerpt=excerpt(text, match.span()),
-                detail=f"greeting addresses '{name}' — {who}",
-            ))
+        # A shortened or surname-addressed recipient ("Greg", "Mr. Whitfield")
+        # is still the recipient: compare against every name token of the
+        # recipient, not just the first name.
+        recip_tokens = set(
+            t.casefold() for t in (recipient_name or "").split()
+            if t
+        )
+        recip_first = recipient_first.casefold()
+        if recip_tokens and any(
+            first in rt or rt in first
+            for rt in recip_tokens | {recip_first}
+        ):
+            continue
+        who = "the impersonated persona" if lowered == persona_first.casefold() \
+            else "someone other than the recipient"
+        findings.append(QualityFinding(
+            check="dialogue_collapse",
+            field=field,
+            excerpt=excerpt(text, match.span()),
+            detail=f"greeting addresses '{name}' — {who}",
+        ))
     return findings
 
 
