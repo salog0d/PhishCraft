@@ -41,7 +41,11 @@ def parse_bindings(text: str) -> dict[str, str]:
         bindings[key] = lines[cursor].split(":", 1)[-1].strip()
         cursor += 1
     for key, value in bindings.items():
-        if "[" in value or "]" in value:
+        # Square brackets are the model's own prompt labels ([EMAIL_BODY] ...);
+        # angle brackets are example placeholders (<recipient first name> ...).
+        # Either means a substitution was skipped, so reject rather than emit
+        # a placeholder a recipient would see verbatim.
+        if "[" in value or "]" in value or "<" in value or ">" in value:
             raise ValueError(
                 f"binding {key} echoed a prompt placeholder instead of a value: "
                 f"{value!r}"

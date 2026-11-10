@@ -232,6 +232,29 @@ def test_parse_bindings_unescapes_literal_newlines():
     assert "\\n" not in bindings["SMS_BODY"]
 
 
+def test_parse_bindings_rejects_angle_bracket_placeholders():
+    """Regression: `<recipient first name>` must be rejected, not delivered.
+
+    A model that copies a few-shot example verbatim leaves `<...>` unfilled;
+    that placeholder must never reach a recipient, so the assembler rejects it
+    (mirroring the existing `[...]` check).
+    """
+    from agent.assembler import parse_bindings
+
+    raw = (
+        "display name: IT Service Desk\n"
+        "role: IT Service Desk\n"
+        "from address: helpdesk@fantazylabz.tech\n"
+        "subject: Q3 vendor statement available\n"
+        "body: Good morning <recipient first name>, the statement is ready.\n"
+        "scheduled at: 2026-08-20T09:00:00Z\n"
+        "body: Portal sync complete.\n"
+        "scheduled at: 2026-08-20T10:15:00Z"
+    )
+    with pytest.raises(ValueError, match="placeholder"):
+        parse_bindings(raw)
+
+
 def test_placeholder_is_expanded_and_not_recorded_as_a_link_fix():
     """Writing {{cta-link}} is correct behavior — expansion is not a fix."""
     placeholder = dict(BINDINGS, SMS_BODY="Hi Rebecca, click {{cta-link}} now.")
