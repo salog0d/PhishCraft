@@ -43,7 +43,10 @@ def resolve_model():
             from agent.model_trace import install_ollama_thinking_shim
 
             install_ollama_thinking_shim()
-        return LiteLlm(model=DEFAULT_MODEL, temperature=0.0)
+        # No temperature here: the per-run GenerateContentConfig built by
+        # agent.pipeline._generation_config (from spec["params"]) controls
+        # sampling. Pinning 0.0 made every run greedy and ignored the spec.
+        return LiteLlm(model=DEFAULT_MODEL)
     return DEFAULT_MODEL  # Gemini model id, key from GOOGLE_API_KEY
 
 

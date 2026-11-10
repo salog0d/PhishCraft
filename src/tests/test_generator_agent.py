@@ -444,7 +444,7 @@ def test_user_prompt_carries_the_concrete_persona_when_present():
 
 def test_generation_params_are_recorded_in_provenance():
     """Per-run sampling params (temperature/top_p/max_tokens) flow into the
-    provenance, with the seed merged in; absent params fall back to temp 0.0.
+    provenance, with the seed merged in; absent params fall back to temp 0.9.
     """
     campaign = assemble_campaign(
         BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
@@ -458,12 +458,12 @@ def test_generation_params_are_recorded_in_provenance():
     assert params.seed == 42
 
 
-def test_generation_params_default_to_temperature_zero():
-    """No params block -> the adapter default temperature (0.0) is recorded."""
+def test_generation_params_default_to_temperature_point_nine():
+    """No params block -> the adapter default temperature (0.9) is recorded."""
     campaign = assemble_campaign(
         BINDINGS, MISSION, PROFILE, "executive_request", "urgent", "medium",
         seed=42,
     )
     params = campaign.messages[0].provenance.params
-    assert params.temperature == 0.0
+    assert params.temperature == 0.9
     assert params.seed == 42

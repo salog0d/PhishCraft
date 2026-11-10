@@ -99,8 +99,8 @@ DEFAULT_MODELS = (
 )
 
 # Per-run sampling params (the spec's ``params`` block). ``None`` temperature
-# means "adapter default" (0.0 in agent.config -> deterministic). Raise it to
-# sweep semantic variety: temp > 0 breaks "same seed -> same output".
+# means "adapter default" (0.9 in agent.pipeline -> diverse by default). temp > 0
+# breaks "same seed -> same output"; temp 0.0 reproduces deterministically.
 DEFAULT_TOP_P = None          # None -> provider default
 DEFAULT_MAX_TOKENS = None     # None -> provider default
 

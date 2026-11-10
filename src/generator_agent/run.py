@@ -45,7 +45,7 @@ def main() -> None:
     parser.add_argument("--language", default="en")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--temperature", type=float, default=None,
-                        help="sampling temperature (default: adapter default 0.0)")
+                        help="sampling temperature (default: 0.9)")
     parser.add_argument("--top-p", dest="top_p", type=float, default=None,
                         help="nucleus top-p (default: provider default)")
     parser.add_argument("--max-tokens", dest="max_tokens", type=int, default=None,

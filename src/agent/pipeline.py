@@ -61,21 +61,21 @@ def _generation_config(params: dict | None) -> types.GenerateContentConfig | Non
 
     ADK reads ``temperature`` / ``top_p`` / ``max_output_tokens`` out of the
     LlmRequest config at call time, so this is where semantic variety is
-    injected. ``None`` (no params) means "provider default" — only the model
-    resolution in ``agent.config`` pins anything.
+    injected. With no ``params`` block, default to temperature 0.9 so runs are
+    diverse by default (the old path pinned 0.0 and mode-collapsed).
     """
-    if not params:
-        return None
-    config_kwargs = {}
-    for src, dst in (
-        ("temperature", "temperature"),
-        ("top_p", "top_p"),
-        ("max_tokens", "max_output_tokens"),
-    ):
-        value = params.get(src)
-        if value is not None:
-            config_kwargs[dst] = value
-    return types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+    config_kwargs: dict = {"temperature": 0.9} if not params else {}
+    if params:
+        for src, dst in (
+            ("temperature", "temperature"),
+            ("top_p", "top_p"),
+            ("max_tokens", "max_output_tokens"),
+            ("seed", "seed"),
+        ):
+            value = params.get(src)
+            if value is not None:
+                config_kwargs[dst] = value
+    return types.GenerateContentConfig(**config_kwargs)
 
 
 def build_content_agent(params: dict | None = None) -> LlmAgent:
