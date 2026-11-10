@@ -360,6 +360,37 @@ def test_persona_for_package_delivery_is_the_external_carrier():
     assert p["email"] == "notifications@swiftship.example"
 
 
+def test_persona_for_bank_detail_change_is_the_external_supplier():
+    from generator_agent.catalog import persona_for
+
+    p = persona_for("bank_detail_change", 24)
+    assert p["email"] == "ap@northwind-supplies.example"
+
+
+def test_persona_for_attorney_impersonation_is_the_external_law_firm():
+    from generator_agent.catalog import persona_for
+
+    p = persona_for("attorney_impersonation", 3)
+    assert p["email"] == "counsel@hartwellvance.example"
+
+
+def test_persona_for_data_theft_and_gift_card_is_the_manager():
+    from generator_agent.catalog import persona_for
+
+    # Rebecca Stern (40) reports to Samuel Adeyemi (24).
+    for pretext in ("data_theft", "gift_card"):
+        p = persona_for(pretext, 40)
+        assert p["email"] == "samuel.adeyemi@fantazylabz.tech"
+
+
+def test_persona_for_account_compromise_and_payroll_is_the_manager():
+    from generator_agent.catalog import persona_for
+
+    for pretext in ("account_compromise", "payroll_diversion"):
+        p = persona_for(pretext, 40)
+        assert p["email"] == "samuel.adeyemi@fantazylabz.tech"
+
+
 def test_persona_for_never_impersonates_its_own_recipient():
     from generator_agent.catalog import persona_for
 
