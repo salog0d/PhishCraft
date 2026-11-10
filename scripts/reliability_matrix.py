@@ -66,11 +66,12 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 # Design constants
 # --------------------------------------------------------------------------- #
 
-# Exact versions, resolved from `ollama list` (recorded in the manifest too).
+# Frozen model tags (see docs/model-versions.md). Never ``latest``: these are
+# immutable `ollama cp` snapshots so the whole matrix is reproducible.
 DEFAULT_MODELS = (
-    "qwen3:8b",           # 500a1f067a9f
-    "llama3.1:8b",        # 46e0c10c039e
-    "phi4-mini:latest",   # 78fad5d182a7
+    "qwen3:8b-q4km-20261110",        # 8.2B Q4_K_M — sha256 a3de86cd…
+    "llama3.1:8b-q4km-20261110",     # 8.0B Q4_K_M — sha256 667b0c19…
+    "phi4-mini:3.8b-q4km-20261110",  # 3.8B Q4_K_M — sha256 3c168af1…
 )
 TEMPERATURES = (0.0, 0.5, 1.0)
 SEEDS = (101, 202, 303)
@@ -131,6 +132,21 @@ def model_ref(model: str) -> tuple[str, str]:
         if provider in KNOWN_PREFIXES:
             return f"{provider}/{name}", name
     return f"ollama/{model}", model
+
+
+# Ollama runs are recorded under the ``local`` family (the ModelFamily enum has
+# no ``ollama`` member); API providers map to their own family members.
+_FAMILY_BY_PREFIX = {
+    "ollama": "local",
+    "deepseek": "deepseek",
+    "gemini": "openai",
+}
+
+
+def _family_for(model: str) -> str:
+    """Enum-safe ``ModelSpec.family`` for a model entry's provider prefix."""
+    prefix = model_ref(model)[0].split("/", 1)[0]
+    return _FAMILY_BY_PREFIX.get(prefix, "local")
 
 
 # --------------------------------------------------------------------------- #
@@ -351,7 +367,7 @@ def run_one(run: dict, mission: dict, out: Path, run_timeout: int,
         "difficulty": run["difficulty"],
         "language": LANGUAGE,
         "seed": run["seed"],
-        "model": {"family": model_ref(run["model"])[0].split("/", 1)[0],
+        "model": {"family": _family_for(run["model"]),
                   "name": model_ref(run["model"])[1], "adapter_version": "1.0"},
         "recipient_id": run["recipient_id"],
         "start_at": START_AT,
