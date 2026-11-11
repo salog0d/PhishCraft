@@ -604,11 +604,14 @@ def _key(r):
 
 
 def analyze(rows: list[dict]) -> dict:
-    # 1. Compliance by model x temperature (completed runs only, flagged).
+    # 1. Delivery guarantee by model x temperature (completed runs only).
     comp = defaultdict(lambda: {"total": 0, "ok": 0, "failed": 0,
                                 "completed": 0, "all_passed": 0})
     errs_by_check = Counter()
     effort = defaultdict(lambda: Counter())
+    # R6: two separate rates — spec compliance (label audit) vs structural flags.
+    spec = defaultdict(lambda: defaultdict(Counter))  # per (model,temp): label -> Counter(status)
+    flags = defaultdict(lambda: [0, 0])        # per (model,temp): [flagged, total]
     for r in rows:
         k = _key(r)
         comp[k]["total"] += 1
@@ -629,6 +632,13 @@ def analyze(rows: list[dict]) -> dict:
             effort[k]["total_tokens"] += (r.get("trace") or {}).get("total_tokens", 0) or 0
             effort[k]["duration_ms"] += r.get("duration_ms", 0)
             effort[k]["critic_calls"] += (r.get("trace") or {}).get("critic_calls", 0) or 0
+            # R6 aggregations
+            q = r.get("quality") or {}
+            flags[k][1] += 1
+            if q.get("any_flag"):
+                flags[k][0] += 1
+            for lab, status in (q.get("label_statuses") or {}).items():
+                spec[k][lab][status] += 1
         else:
             comp[k]["failed"] += 1
     # 2. errors by constraint (model x temp x check)
@@ -662,6 +672,30 @@ def analyze(rows: list[dict]) -> dict:
                 "critic_calls": v["critic_calls"],
             }
             for (m, t), v in sorted(effort.items())
+        },
+        # R6: two separate rates, so structural flags and spec compliance are
+        # never conflated into one "compliance" number.
+        "structural_flags": {
+            f"{m} @ {t}": {
+                "flagged": v[0],
+                "total": v[1],
+                "flag_rate": round(v[0] / v[1], 4) if v[1] else None,
+            }
+            for (m, t), v in sorted(flags.items())
+        },
+        "spec_compliance": {
+            f"{m} @ {t}": {
+                label: {
+                    "ok": c.get("ok", 0),
+                    "mismatch": c.get("mismatch", 0),
+                    "unverifiable": c.get("unverifiable", 0),
+                    "total": sum(c.values()),
+                    "match_rate": round(c.get("ok", 0) / sum(c.values()), 4)
+                    if sum(c.values()) else None,
+                }
+                for label, c in sorted(labels.items())
+            }
+            for (m, t), labels in sorted(spec.items())
         },
     }
     return out
@@ -716,6 +750,32 @@ def markdown(comp: dict, n_total: int) -> str:
             f"| {v['refinements_improved']} "
             f"| {v['mean_total_tokens']} | {v['mean_duration_s']} | {v['critic_calls']} |"
         )
+    # R6 — two separate rates.
+    lines += ["", "## 4 · Content quality: structural flags (quality scan)", "",
+              "Share of completed campaigns with ≥1 quality-scan finding (the",
+              "content-quality signal, independent of the structural guarantee).",
+              "",
+              "| model × temperature | flagged | total | flag rate |",
+              "|---|---|---|---|"]
+    for label, v in comp["structural_flags"].items():
+        lines.append(
+            f"| {label} | {v['flagged']} | {v['total']} | "
+            f"{v['flag_rate'] if v['flag_rate'] is not None else '—'} |"
+        )
+    lines += ["", "## 5 · Spec compliance (label audit) — separate from the guarantee", "",
+              "`match_rate` = share of completed campaigns whose generated prose",
+              "the deterministic labeler reads as matching the requested label.",
+              "(`unverifiable` = no signal; not counted as a match.)",
+              "",
+              "| model × temperature | label | ok | mismatch | unverifiable | match rate |",
+              "|---|---|---|---|---|---|"]
+    for label, labels in comp["spec_compliance"].items():
+        for lab, v in labels.items():
+            lines.append(
+                f"| {label} | {lab} | {v['ok']} | {v['mismatch']} "
+                f"| {v['unverifiable']} | "
+                f"{v['match_rate'] if v['match_rate'] is not None else '—'} |"
+            )
     return "\n".join(lines) + "\n"
 
 
