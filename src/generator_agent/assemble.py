@@ -67,6 +67,12 @@ DOC_EXTS = ("xlsx", "pdf", "csv")
 _ACCOUNT_DOC_SUBJECTS = ("account", "login", "access", "security", "profile", "billing")
 _ACCOUNT_DOC_QUALIFIERS = ("portal", "notice", "security", "final", "urgent")
 
+# Executive/shared-document domain: sign-off / board / contract material. This
+# deliberately excludes payroll/tax terms so an executive_request no longer
+# leaks ``hr_notice`` lexicon (which was inflating the pretext label-mismatch).
+_EXEC_DOC_SUBJECTS = ("board-pack", "sign-off", "contract", "approval", "quarterly-report")
+_EXEC_DOC_QUALIFIERS = ("Q3", "Q4", "final", "draft", "urgent")
+
 # Synthetic time labels composed per seed (deterministic, wide range).
 _HOURS = tuple(f"{h:02d}" for h in range(7, 19))
 _MINUTES = ("00", "15", "30", "45")
@@ -81,16 +87,20 @@ def _deadline(rng: random.Random, pretext: str | None = None) -> str:
     windows = ("today", "tomorrow", "this week", "by Friday")
     if pretext in ("account_suspension", "password_reset"):
         windows = ("today", "immediately", "within 24 hours", "by end of day")
-    elif pretext in ("invoice_payment", "executive_request", "shared_document"):
+    elif pretext in ("invoice_payment", "shared_document"):
         windows = ("today", "tomorrow", "this week", "by Friday", "before payroll")
+    elif pretext == "executive_request":
+        # Executive requests name a sign-off window, not a payroll deadline
+        # (payroll/tax lexicon reads as hr_notice to the labeler).
+        windows = ("today", "tomorrow", "this week", "by Friday", "before the board meeting")
     return f"{rng.choice(_HOURS)}:{rng.choice(_MINUTES)} {rng.choice(windows)}"
 
 
 def _amount(rng: random.Random, pretext: str | None = None) -> str:
     """A realistic money amount, or None for pretexts where a figure is
-    incongruous (account_suspension / password_reset)."""
-    if pretext in ("account_suspension", "password_reset"):
-        return ""  # no currency figure for consumer account/security lures
+    incongruous (account_suspension / password_reset / executive_request)."""
+    if pretext in ("account_suspension", "password_reset", "executive_request"):
+        return ""  # no currency figure: consumer lures + executive sign-offs don't cite money
     currency = rng.choice(("$", "US$", "€", "£"))
     whole = rng.randint(1200, 98000)
     cents = rng.randint(0, 99)
@@ -105,6 +115,12 @@ def _doc_name(rng: random.Random, pretext: str | None = None) -> str:
             f"{rng.choice(_ACCOUNT_DOC_QUALIFIERS)}-"
             f"{rng.randint(1, 40)}.{rng.choice(DOC_EXTS)}"
         )
+    if pretext in ("executive_request", "shared_document"):
+        return (
+            f"{rng.choice(_EXEC_DOC_SUBJECTS)}-"
+            f"{rng.choice(_EXEC_DOC_QUALIFIERS)}-"
+            f"{rng.randint(1, 40)}.{rng.choice(DOC_EXTS)}"
+        )
     return (
         f"{rng.choice(DOC_SUBJECTS)}-"
         f"{rng.choice(DOC_QUALIFIERS)}-"
@@ -112,23 +128,31 @@ def _doc_name(rng: random.Random, pretext: str | None = None) -> str:
     )
 
 
-def variation_axes(seed: int, pretext: str | None = None) -> dict:
+def variation_axes(
+    seed: int, pretext: str | None = None, difficulty: str | None = None
+) -> dict:
     """Deterministic per-seed variation axes (Fix A).
 
     Injected into ``user_prompt`` so the same cell at different seeds asks the
     model for a different opener/structure/urgency/SMS angle and *different
     concrete world-details* (deadline, amount, document) that are coherent with
-    the pretext. Same seed + pretext -> same axes -> reproducible.
+    the pretext. Same seed + pretext + difficulty -> same axes -> reproducible.
+
+    ``difficulty`` is respected: an ``easy`` campaign is a single, non-urgent
+    ask — so no deadline and no amount are injected (the charter's "easy = no
+    deadline, single ask"). Without that, the labeler could never distinguish
+    easy from hard because every prompt forced a deadline anyway.
     """
     rng = random.Random(seed)
+    easy = difficulty == "easy"
     return {
         "opener": rng.choice(OPENERS),
         "structure": rng.choice(STRUCTURES),
         "urgency_style": rng.choice(URGENCY_STYLES),
         "sms_angle": rng.choice(SMS_ANGLES),
         "max_body_words": rng.choice((40, 55, 70)),
-        "deadline": _deadline(rng, pretext),
-        "amount": _amount(rng, pretext),
+        "deadline": "" if easy else _deadline(rng, pretext),
+        "amount": "" if easy else _amount(rng, pretext),
         "doc_name": _doc_name(rng, pretext),
     }
 
@@ -386,10 +410,14 @@ def user_prompt(
     # provably differ. Absent seed (legacy path) -> no axes block.
     axes_block = ""
     if seed is not None:
-        axes = variation_axes(seed, pretext=pretext)
-        # The amount line is omitted for pretexts where a currency figure is
-        # incongruous (account_suspension / password_reset), so the prompt
-        # never asks the model to invent one.
+        axes = variation_axes(seed, pretext=pretext, difficulty=difficulty)
+        # Omit the deadline/amount lines when they are empty (easy: no deadline,
+        # and no amount for account/password pretexts), so the prompt never asks
+        # the model to invent a detail that the difficulty level forbids.
+        deadline_line = (
+            f"- a concrete deadline to name: {axes['deadline']}\n"
+            if axes["deadline"] else ""
+        )
         amount_line = (
             f"- a concrete amount to reference: {axes['amount']}\n"
             if axes["amount"] else ""
@@ -401,7 +429,7 @@ def user_prompt(
             f"- urgency style: {axes['urgency_style']}\n"
             f"- email body ≤ {axes['max_body_words']} words\n"
             f"- SMS angle: {axes['sms_angle']}\n"
-            f"- a concrete deadline to name: {axes['deadline']}\n"
+            f"{deadline_line}"
             f"{amount_line}"
             f"- a concrete document name to cite: {axes['doc_name']}\n"
         )
