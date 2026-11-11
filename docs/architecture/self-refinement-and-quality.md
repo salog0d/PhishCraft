@@ -162,8 +162,12 @@ For each execution the harness records:
 
 | Field | Meaning |
 |-------|---------|
-| `n_attempts` | rejection + refinement rounds before a valid campaign |
-| `refined` | whether a self-refinement round ran |
+| `n_parse_attempts` | Phase-1 parse-level rejection attempts (before a valid campaign parses) |
+| `n_refine_rounds` | Phase-2 self-refinement rounds actually run |
+| `n_attempts` | `n_parse_attempts` + `n_refine_rounds` (back-compat total) |
+| `refined` | whether any self-refinement round ran |
+| `refine_reason` | which signal triggered refinement (`link_violation`, `structural`, or both) |
+| `refinement_improved` | whether quality flags dropped after the critique (real success measure) |
 | `critic_calls` | how many times the critic LLM was invoked |
 | `generator_calls` | how many times the content LLM was invoked |
 | `total_tokens` | tokens across generator + critic (effort) |
@@ -172,8 +176,11 @@ For each execution the harness records:
 | `quality.*` | flags / label mismatches / strip stats from the quality scan |
 
 The interesting number is the **effort**: a model that reaches a valid campaign
-in 1 attempt + 0 critic calls is "cheaper" than one that needs 3 tries and 2
-critic rounds, even though both produce a passing artifact. The 100 % coherence
-pass rate, combined with the per-model effort distribution, is itself the
-study's result: it shows what the assembler guarantees by construction, and how
-much each model had to work to get there.
+in 1 parse + 0 critic calls is "cheaper" than one that needs 3 parses and 2
+critic rounds, even though both produce a passing artifact. Crucially,
+`refinement_improved` separates *real* correction from *wasted* rounds: a round
+that fired but did not lower the flags was chasing a non-issue (e.g. a detector
+false positive), not improving the artifact. The 100 % coherence pass rate,
+combined with the per-model effort distribution, is itself the study's result:
+it shows what the assembler guarantees by construction, and how much each model
+had to work to get there.

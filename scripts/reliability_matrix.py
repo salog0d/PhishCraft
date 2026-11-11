@@ -113,6 +113,22 @@ def sanitize(name: str) -> str:
     return name.replace(":", "-").replace("/", "-")
 
 
+def model_slug(model: str) -> str:
+    """A short, unique identifier for the run_id.
+
+    The full frozen tag (e.g. ``phi4-mini:3.8b-q4km-20261110``) is too long for
+    the ``spec_id`` field (40 chars) once prefixed with the case/temp/seed. The
+    exact version is still recorded in ``spec.model.name`` and
+    ``docs/model-versions.md``, so the run_id only needs a compact slug: the
+    base name with the version suffix (``-q4km-YYYYMMDD``) stripped.
+    """
+    name = model_ref(model)[1]  # bare name, no provider/ prefix
+    # drop a trailing frozen-tag suffix like `-q4km-20261110` or `-Q4_K_M`
+    import re
+    name = re.sub(r"-[A-Za-z0-9]{2,}-?\d{8}$", "", name)
+    return sanitize(name)
+
+
 # Provider prefixes ``resolve_model`` understands (agent.config). A model entry
 # may carry one (``ollama/qwen3:8b``, ``deepseek/deepseek-chat``); when absent it
 # is a local Ollama model and ``ollama/`` is prepended. The Ollama *host* is
@@ -232,7 +248,7 @@ def build_plan(models: list[str]) -> dict:
                         }
                     )
     for i, run in enumerate(runs):
-        run["run_id"] = f"{run['case_id']}-{sanitize(run['model'])}"
+        run["run_id"] = f"{run['case_id']}-{model_slug(run['model'])}"
         run["run_id"] += f"-t{run['temperature']}-s{run['seed']}"
     return {
         "generated_at": utc_now(),
@@ -604,8 +620,12 @@ def analyze(rows: list[dict]) -> dict:
             for c in r.get("failing_checks") or []:
                 errs_by_check[(k[0], k[1], c)] += 1
             effort[k]["runs"] += 1
-            effort[k]["n_attempts"] += (r.get("run_info") or {}).get("n_attempts", 0) or 0
-            effort[k]["refined"] += 1 if (r.get("run_info") or {}).get("refined") else 0
+            ri = r.get("run_info") or {}
+            effort[k]["n_attempts"] += ri.get("n_attempts", 0) or 0
+            effort[k]["n_parse_attempts"] += ri.get("n_parse_attempts", ri.get("n_attempts", 0)) or 0
+            effort[k]["n_refine_rounds"] += ri.get("n_refine_rounds", 0) or 0
+            effort[k]["refined"] += 1 if ri.get("refined") else 0
+            effort[k]["refinement_improved"] += 1 if ri.get("refinement_improved") else 0
             effort[k]["total_tokens"] += (r.get("trace") or {}).get("total_tokens", 0) or 0
             effort[k]["duration_ms"] += r.get("duration_ms", 0)
             effort[k]["critic_calls"] += (r.get("trace") or {}).get("critic_calls", 0) or 0
@@ -633,8 +653,10 @@ def analyze(rows: list[dict]) -> dict:
         "effort": {
             f"{m} @ {t}": {
                 "runs": v["runs"],
-                "mean_attempts": round(v["n_attempts"] / v["runs"], 2) if v["runs"] else None,
+                "mean_parse_attempts": round(v["n_parse_attempts"] / v["runs"], 2) if v["runs"] else None,
+                "mean_refine_rounds": round(v["n_refine_rounds"] / v["runs"], 2) if v["runs"] else None,
                 "refined_runs": v["refined"],
+                "refinements_improved": v["refinement_improved"],
                 "mean_total_tokens": round(v["total_tokens"] / v["runs"], 1) if v["runs"] else None,
                 "mean_duration_s": round(v["duration_ms"] / v["runs"] / 1000, 1) if v["runs"] else None,
                 "critic_calls": v["critic_calls"],
@@ -649,10 +671,18 @@ def markdown(comp: dict, n_total: int) -> str:
     lines = [
         f"# Reliability matrix — summary ({n_total} executions recorded)",
         "",
-        "## 1 · Compliance by model × temperature",
+        "## 1 · Delivery guarantee (assembler baseline, not a model result)",
+        "",
+        "Every completed campaign passes all five coherence checks **by",
+        "construction**: the deterministic assembler stamps persona, tracking",
+        "token, schedule, references and provenance, so the model's prose cannot",
+        "break structural coherence. A 100 % pass rate here is an invariant of the",
+        "pipeline — it does **not** measure the LLM, only that the assembler holds.",
+        "The real model signal is the *content* quality (label audit, quality",
+        "flags) reported separately.",
         "",
         "Rates are computed **among completed campaigns**; failed/timeout runs are",
-        "listed separately so a compliance number never hides dropped executions.",
+        "listed separately so a guarantee number never hides dropped executions.",
         "",
         "| model × temperature | total | completed | failed/timeout | all_passed | rate (completed) |",
         "|---|---|---|---|---|---|",
@@ -671,13 +701,19 @@ def markdown(comp: dict, n_total: int) -> str:
             lines.append(f"| {label} | {n} |")
     else:
         lines.append("(no coherence failures recorded)")
-    lines += ["", "## 3 · Effort required (model × temperature)", "",
-              "| model × temperature | runs | mean attempts | refined runs | "
-              "mean tokens | mean duration (s) | critic calls |",
-              "|---|---|---|---|---|---|---|"]
+    lines += ["", "## 3 · Effort required (split: parse vs refinement)", "",
+              "> `improved` counts refined runs whose quality flags actually",
+              "> dropped after the critique — the real measure of whether",
+              "> self-refinement helps.",
+              "",
+              "| model × temperature | runs | parse attempts | refine rounds | refined | improved | "
+              "mean tokens | duration (s) | critic calls |",
+              "|---|---|---|---|---|---|---|---|---|"]
     for label, v in comp["effort"].items():
         lines.append(
-            f"| {label} | {v['runs']} | {v['mean_attempts']} | {v['refined_runs']} "
+            f"| {label} | {v['runs']} | {v['mean_parse_attempts']} "
+            f"| {v['mean_refine_rounds']} | {v['refined_runs']} "
+            f"| {v['refinements_improved']} "
             f"| {v['mean_total_tokens']} | {v['mean_duration_s']} | {v['critic_calls']} |"
         )
     return "\n".join(lines) + "\n"
