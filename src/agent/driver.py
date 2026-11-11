@@ -75,12 +75,14 @@ def raw_link_violations(campaign: GeneratedCampaign) -> int:
 
 
 def _structural_issues(campaign: GeneratedCampaign, report, spec: dict):
-    """(has_structural_problem, quality) for one parsed campaign.
+    """(has_structural_problem, quality, label_mismatches) for one campaign.
 
     ``has_structural_problem`` is True when the campaign has a coherence
     (validator) failure or a stage-direction / meta-bleed quality finding — the
-    signal the critic should feed back. Returns the quality scan result too, so
-    the caller hands it straight to the critic.
+    signal the critic should feed back. ``label_mismatches`` lists the spec
+    labels (tone/difficulty) whose generated prose the deterministic labeler
+    reads as not matching the requested value — the *content* signal that the
+    refinement gate also reacts to (R1). Returns the quality scan result too.
     """
     from quality_agent.scan import scan_campaign
 
@@ -90,7 +92,13 @@ def _structural_issues(campaign: GeneratedCampaign, report, spec: dict):
         r.check in ("stage_direction", "meta_bleed") and not r.passed
         for r in quality.results
     )
-    return (coherence_fail or structural), quality
+    # only tone/difficulty are re-aimable; pretext is decided by the persona
+    # selection, not by prose, so it is not fed back.
+    label_mismatches = [
+        lab for lab in quality.label_audit.mismatches
+        if lab in ("tone", "difficulty")
+    ]
+    return (coherence_fail or structural), quality, label_mismatches
 
 
 def build_refinement(campaign: GeneratedCampaign) -> str:
@@ -234,13 +242,16 @@ async def _run_async(
         "refinement_improved": None,       # did quality flags drop after refining?
     }
     for _ in range(REFINE_EXTRA_ATTEMPTS):
-        structural, quality = _structural_issues(campaign, report, spec)
+        structural, quality, label_mismatches = _structural_issues(
+            campaign, report, spec)
         flags_before = quality.n_flags
         reasons = []
         if raw_link_violations(campaign) > 0:
             reasons.append("link_violation")
         if structural:
             reasons.append("structural")
+        if label_mismatches:
+            reasons.append("label_mismatch")
         needs_refine = bool(reasons)
         if not needs_refine:
             break
@@ -248,11 +259,13 @@ async def _run_async(
         info["n_refine_rounds"] += 1
         info["n_attempts"] += 1
         info["refine_reason"] = "+".join(reasons)
-        # Build the critique: critic LLM for structural findings, the
-        # deterministic link-critique as the (only) fallback for stale tokens.
+        # Build the critique: critic LLM for structural OR label-mismatch
+        # findings, the deterministic link-critique as the (only) fallback for
+        # stale tokens.
         critique = None
-        if critique_campaign is not None and structural:
-            critique = await critique_campaign(campaign, report, quality)
+        if critique_campaign is not None and (structural or label_mismatches):
+            critique = await critique_campaign(
+                campaign, report, quality, label_mismatches)
         if critique is None and raw_link_violations(campaign) > 0:
             critique = build_refinement(campaign)
         if not critique:
@@ -272,7 +285,7 @@ async def _run_async(
             info["refinement_improved"] = False
             break
         # Measure whether the refinement actually reduced quality flags.
-        _, quality_after = _structural_issues(campaign, report, spec)
+        _, quality_after, _ = _structural_issues(campaign, report, spec)
         info["refinement_improved"] = quality_after.n_flags < flags_before
     return campaign, report, info
 

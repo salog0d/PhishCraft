@@ -37,12 +37,14 @@ _CRITIQUE_SYSTEM = (
 )
 
 
-def findings_summary(campaign, report, quality) -> list[str]:
+def findings_summary(campaign, report, quality,
+                     label_mismatches: list[str] | None = None) -> list[str]:
     """The structural problems to feed the critic, one line each.
 
     Coherence (validator) failures get their ``detail``; the quality scan's
-    stage-direction and meta-bleed findings get their per-field evidence.
-    Returns [] when nothing structural is wrong (so no critique runs).
+    stage-direction and meta-bleed findings get their per-field evidence;
+    ``label_mismatches`` (tone/difficulty) are re-aimable content problems the
+    critic should tell the generator to fix. Returns [] when nothing is wrong.
     """
     problems: list[str] = []
 
@@ -60,6 +62,20 @@ def findings_summary(campaign, report, quality) -> list[str]:
                     loc += f" (e.g. {finding.excerpt!r})"
                 problems.append(f"[{result.check}] {loc}")
 
+    for label in label_mismatches or []:
+        requested = (
+            quality.label_audit.spec_labels.get(label) if quality is not None
+            else None
+        )
+        predicted = (
+            quality.label_audit.predicted_labels.get(label) if quality is not None
+            else None
+        )
+        problems.append(
+            f"[label_mismatch:{label}] requested '{requested}' but the prose "
+            f"reads like '{predicted}' — rewrite to match the requested {label}."
+        )
+
     return problems
 
 
@@ -68,19 +84,23 @@ def _critique_prompt(problems: list[str]) -> str:
     return (
         f"The generated campaign has these structural problems:\n{listing}\n\n"
         "Write the critique directly to the content generator: what to remove "
-        "(stage directions, meta commentary), what to keep, and the one rule it "
-        "must re-read about never writing URLs or bracket placeholders."
+        "(stage directions, meta commentary), what to keep, and how to adjust "
+        "the tone/difficulty so it matches the requested label. Never write "
+        "URLs or bracket placeholders."
     )
 
 
-async def critique_campaign(campaign, report, quality) -> str | None:
+async def critique_campaign(campaign, report, quality,
+                            label_mismatches: list[str] | None = None) -> str | None:
     """Run the critic LLM; returns the critique text, or None when nothing to fix.
 
     The campaign is passed only so the critic can reference it if needed; it is
     never mutated. On any error the critic is skipped (the deterministic
     backstop — assembler normalization — still holds).
+    ``label_mismatches`` feeds the tone/difficulty re-aimable problems into the
+    critique so the critic can tell the generator to fix them.
     """
-    problems = findings_summary(campaign, report, quality)
+    problems = findings_summary(campaign, report, quality, label_mismatches)
     if not problems:
         return None
     model = resolve_critic_model()
