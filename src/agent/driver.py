@@ -219,19 +219,35 @@ async def _run_async(
     # or a stage-direction / meta-bleed quality finding — is regenerated with a
     # critique. Link tokens use the deterministic build_refinement; structural
     # findings go through the critic LLM when it is available.
-    # The first-attempt violation count is kept for the reliability metric.
+    #
+    # The info dict now separates the two phases (parse rejection vs refinement)
+    # and records *why* refinement fires and whether it actually improved the
+    # artifact, so the "effort" metric is interpretable instead of a merge of
+    # unrelated retry counts.
     info = {
-        "n_attempts": attempts,
+        "n_attempts": attempts,            # total parses + refinements (back-compat)
+        "n_parse_attempts": attempts,      # Phase 1: parse-level rejection attempts
+        "n_refine_rounds": 0,              # Phase 2: refinement rounds actually run
         "refined": False,
         "first_attempt_raw_link_violations": raw_link_violations(campaign),
+        "refine_reason": None,             # which signal triggered refinement
+        "refinement_improved": None,       # did quality flags drop after refining?
     }
     for _ in range(REFINE_EXTRA_ATTEMPTS):
         structural, quality = _structural_issues(campaign, report, spec)
-        needs_refine = raw_link_violations(campaign) > 0 or structural
+        flags_before = quality.n_flags
+        reasons = []
+        if raw_link_violations(campaign) > 0:
+            reasons.append("link_violation")
+        if structural:
+            reasons.append("structural")
+        needs_refine = bool(reasons)
         if not needs_refine:
             break
         info["refined"] = True
+        info["n_refine_rounds"] += 1
         info["n_attempts"] += 1
+        info["refine_reason"] = "+".join(reasons)
         # Build the critique: critic LLM for structural findings, the
         # deterministic link-critique as the (only) fallback for stale tokens.
         critique = None
@@ -253,7 +269,11 @@ async def _run_async(
                 f"refinement produced no valid campaign "
                 f"({type(exc).__name__}: {exc}); keeping the previous attempt"
             )
+            info["refinement_improved"] = False
             break
+        # Measure whether the refinement actually reduced quality flags.
+        _, quality_after = _structural_issues(campaign, report, spec)
+        info["refinement_improved"] = quality_after.n_flags < flags_before
     return campaign, report, info
 
 
