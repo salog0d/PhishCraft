@@ -37,13 +37,13 @@ def _clean_bindings() -> dict:
             # v2 charter: no banned openers ("Hi"/"Dear"), no "before end of day",
             # no "confirm", no "please review". Genuinely urgent + medium so the
             # labeler still agrees with SPEC, but clean of repetition phrases.
-            "EMAIL_SUBJECT": "Q3 vendor statement requires approval today",
+            "EMAIL_SUBJECT": "Urgent: Q3 vendor statement requires approval today",
             "EMAIL_BODY": (
                 "The third-quarter vendor statement has been posted to the "
-                "portal and requires your sign-off today. Failure to approve "
-                "delays the board meeting. A summary of the outstanding line "
-                "items is attached to your account record for reconciliation. "
-                "— Elena"
+                "portal and requires your sign-off immediately. Failure to "
+                "approve delays the board meeting. A summary of the outstanding "
+                "line items is attached to your account record for "
+                "reconciliation. — Elena"
             ),
             "SMS_BODY": (
                 "Portal sync complete — a new line item was added late yesterday "
@@ -210,7 +210,14 @@ def test_strip_stage_directions_removes_artifacts(text, expected):
 def test_labeler_reports_unverifiable_when_there_is_no_signal():
     from quality_agent.labels import predict_tone
 
-    campaign = _campaign(BINDINGS)  # terse fixture with mixed weak markers
+    # A truly unmarked message (no urgent/friendly/authoritative/neutral cues)
+    # must be unverifiable, not forced into a tone.
+    campaign = _campaign(dict(
+        BINDINGS,
+        EMAIL_SUBJECT="Quarterly summary",
+        EMAIL_BODY="The third-quarter summary is attached for your records.",
+        SMS_BODY="The summary has been posted to the portal.",
+    ))
     assert predict_tone(campaign) is None  # ambiguous -> unverifiable, not forced
 
 

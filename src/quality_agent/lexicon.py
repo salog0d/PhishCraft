@@ -69,21 +69,25 @@ PRETEXT_TERMS: dict[str, tuple[str, ...]] = {
 TONE_MARKERS: dict[str, tuple[str, ...]] = {
     "urgent": (
         "urgent", "urgently", "immediately", "asap", "right away",
-        "before end of day", "eod", "today", "final notice", "expires",
-        "deadline", "act now", "time-sensitive", "action needed",
+        "before end of day", "eod", "final notice", "expires",
+        "act now", "time-sensitive", "action needed", "at once",
     ),
     "friendly": (
         "hope you're", "hope you are", "thanks", "thank you", "appreciate",
         "have a great", "warm regards", "cheers", "hi there", "how are you",
+        "just a quick", "no worries",
     ),
     "authoritative": (
         "required", "must", "mandatory", "policy", "compliance",
         "on behalf of", "directive", "in accordance", "failure to",
-        "obligated", "per company policy",
+        "obligated", "per company policy", "authorized",
     ),
+    # Neutral is intentionally narrow: the generic filler words ("please",
+    # "review", "confirm") that previously lived here appear in *every* tone and
+    # were biasing the argmax toward neutral. Keeping only truly neutral,
+    # non-committal phrasing.
     "neutral": (
-        "please", "review", "update", "confirm", "let me know", "fyi",
-        "for your information",
+        "fyi", "for your information", "for your awareness", "heads up",
     ),
 }
 
@@ -144,17 +148,16 @@ META_BLEED_PATTERNS: tuple[str, ...] = (
     r"the (8|eight) lines",
     r"\bbindings?\b",
     r"<[a-z][a-z _-]{1,20}>",
+    # Domain meta-commentary: the simulated victim would never see the concept
+    # being named, so its presence is genuine instruction echo (kept on purpose).
     r"\b(phishing|smishing|social engineering)\b",
-    # v2 anti-repetition block (prompts/generator_ag.md Fix F): the mode-collapse
-    # phrases the v1 charter trained the model to parrot. Their presence in the
-    # delivered prose is evidence the generator fell back on the few-shot template.
-    r"(?i)(?m)^\s*(hi|dear|hello)\b[^,\n]{0,40}",  # banned bare opener
-    r"(?i)before end of day",
-    r"(?i)please review",
-    r"(?i)action required",
-    r"(?i)let me know",
-    r"(?i)\bconfirm\b",
-    r"(?i)did you get my email",  # SMS mirroring the email (Fix C)
+    # NOTE: the v2 anti-repetition-block phrases ("please review", "confirm",
+    # "action required", "let me know", "before end of day", "dear/hi <name>")
+    # were previously listed here as meta-bleed evidence. They are not: they are
+    # ordinary business-email language the model legitimately produces, and they
+    # were overwhelming the signal (the top meta_bleed "findings" were all
+    # "confirm"/"please review"). Those belong to a *style* metric, not the
+    # instruction-echo detector, so they were removed here.
 )
 
 # --------------------------------------------------------------------------- #
@@ -189,10 +192,17 @@ KNOWN_BRANDS: tuple[str, ...] = ("northwind", "meridian", "swiftship")
 _TYPOGRAPHIC_OK = set('\u2018\u2019\u201c\u201d\u2013\u2014\u2026\u00b7\u2022'
                       '\u00a0\u00b0\u00ae\u00a9\u2122')
 
+# Currency symbols the generator legitimately writes when citing amounts.
+# They are non-ASCII, so without an explicit allow-list a seeded "£"/"€" amount
+# is misclassified as non-Latin-script contamination (the paper's
+# non-Latin-script filter is about CJK/Arabic/etc., not money).
+CURRENCY_SYMBOLS = set('\u00a3\u20ac\u00a5')  # £ € ¥
+
 
 def is_latin_typo(char: str) -> bool:
-    """True for ASCII or common typographic punctuation (not script bleed)."""
-    return ord(char) < 128 or char in _TYPOGRAPHIC_OK
+    """True for ASCII, common typographic punctuation, or a currency symbol
+    (not script bleed)."""
+    return ord(char) < 128 or char in _TYPOGRAPHIC_OK or char in CURRENCY_SYMBOLS
 
 
 # --------------------------------------------------------------------------- #
