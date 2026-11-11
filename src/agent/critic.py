@@ -33,7 +33,11 @@ _CRITIQUE_SYSTEM = (
     "found in a generated email/SMS campaign. Write ONLY a short critique that "
     "tells the content generator what to fix and why, so it can rewrite the "
     "subject and bodies correctly. Never invent new problems, never suggest new "
-    "content, never write a URL or tracking token. Keep it under 5 sentences."
+    "content, never write a URL or tracking token. Never use the words "
+    "phishing, smishing, or social engineering, and never name the simulation "
+    "domain — the simulated recipient would never see those. Give ONE concrete "
+    "rewrite instruction per problem (e.g. 'replace the imperative subject with "
+    "a declarative one'), not general advice. Keep it under 5 sentences."
 )
 
 
@@ -85,8 +89,10 @@ def _critique_prompt(problems: list[str]) -> str:
         f"The generated campaign has these structural problems:\n{listing}\n\n"
         "Write the critique directly to the content generator: what to remove "
         "(stage directions, meta commentary), what to keep, and how to adjust "
-        "the tone/difficulty so it matches the requested label. Never write "
-        "URLs or bracket placeholders."
+        "the tone/difficulty so it matches the requested label. Give one "
+        "concrete rewrite instruction per problem, not general advice. Never "
+        "write URLs or bracket placeholders, and never use the words phishing, "
+        "smishing, or social engineering."
     )
 
 
@@ -132,14 +138,36 @@ async def critique_campaign(campaign, report, quality,
                     text += part.text
     except Exception:
         return None  # never break the pipeline over critique bookkeeping
-    _trace_critic(model, final_response, time.monotonic() - start)
-    return text.strip() or None
+    _trace_critic(model, final_response, time.monotonic() - start, text)
+    return _scrub(text)
 
 
-def _trace_critic(model, response, duration_s: float) -> None:
+# Domain / meta vocabulary that must never leak from the critique into the
+# regenerated prompt: the simulated recipient would never see these, and they
+# would re-trigger meta_bleed. Stripped from the critique as a deterministic
+# backstop even if the critic LLM strays.
+_META_TOKENS = ("phishing", "smishing", "social engineering")
+
+
+def _scrub(text: str) -> str | None:
+    """Blank the domain/meta vocabulary off a critique, then trim."""
+    if not text or not text.strip():
+        return None
+    cleaned = text
+    for token in _META_TOKENS:
+        cleaned = cleaned.replace(token, "this simulation")
+        cleaned = cleaned.replace(token.title(), "This simulation")
+        cleaned = cleaned.replace(token.upper(), "THIS SIMULATION")
+    cleaned = cleaned.strip()
+    return cleaned or None
+
+
+def _trace_critic(model, response, duration_s: float, text: str = "") -> None:
     """Append the critic call to ``ADK_MODEL_TRACE_FILE`` (same shape as the
     generator's trace) so token/latency totals include the model that proposes
-    corrections. No-op when tracing is disabled."""
+    corrections. ``text`` is the critique the critic actually wrote, kept for
+    observability so a failed refinement can be diagnosed. No-op when tracing
+    is disabled."""
     path = os.getenv("ADK_MODEL_TRACE_FILE")
     if not path:
         return
@@ -150,6 +178,7 @@ def _trace_critic(model, response, duration_s: float) -> None:
         "model": getattr(model, "model", None),
         "duration_s": round(duration_s, 3),
         "response": {
+            "text": text.strip() or None,
             "usage": {
                 "prompt_tokens": getattr(usage, "prompt_token_count", None),
                 "completion_tokens": getattr(usage, "candidates_token_count", None),

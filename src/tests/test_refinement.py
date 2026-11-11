@@ -166,3 +166,16 @@ def test_findings_summary_is_empty_when_campaign_is_clean():
         all_passed=True,
     )
     assert findings_summary(campaign, clean, quality) == []
+
+
+def test_critique_scrub_strips_domain_vocabulary():
+    """The critique must never leak phishing/smishing/social-engineering into
+    the regenerated prompt (it would re-trigger meta_bleed)."""
+    from agent.critic import _scrub
+
+    assert _scrub("intended tone for phishing emails") \
+        == "intended tone for this simulation emails"
+    assert "phishing" not in _scrub("avoid Phishing and Social Engineering")
+    assert "smishing" not in _scrub("SMISHING is bad")
+    assert _scrub("clean critique") == "clean critique"
+    assert _scrub("   ") is None
