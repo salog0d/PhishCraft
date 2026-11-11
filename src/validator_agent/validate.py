@@ -70,7 +70,18 @@ def _check_references(campaign: GeneratedCampaign) -> CoherenceCheckResult:
 def _check_links(campaign: GeneratedCampaign) -> CoherenceCheckResult:
     by_id = {m.message_id: m for m in campaign.messages}
     problems: list[str] = []
+    # Hard precondition: every message must carry a real landing link. A missing
+    # link is an automatic failure (it cannot be normalized away) — this is a
+    # sanity gate, not the by-construction normalization guarantee.
     for m in campaign.messages:
+        if m.call_to_action is None or m.call_to_action.landing_url is None:
+            problems.append(
+                f"{m.message_id} has no landing link (call_to_action.landing_url "
+                f"is missing)"
+            )
+    for m in campaign.messages:
+        if m.call_to_action is None or m.call_to_action.landing_url is None:
+            continue  # already reported above
         allowed = {_token_of(m.call_to_action.landing_url)}
         for ref in m.references:
             if ref in by_id:
@@ -95,7 +106,8 @@ def _check_links(campaign: GeneratedCampaign) -> CoherenceCheckResult:
     return CoherenceCheckResult(
         check="link_consistency",
         passed=not problems,
-        detail="all body links match the CTA" if not problems else "; ".join(problems),
+        detail="all messages carry a link and body links match the CTA"
+               if not problems else "; ".join(problems),
     )
 
 

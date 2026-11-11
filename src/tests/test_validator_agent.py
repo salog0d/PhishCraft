@@ -96,6 +96,32 @@ def test_literal_newline_after_url_is_not_a_link_failure():
     assert tokens_in(body) == {token}
 
 
+def test_missing_landing_link_fails_link_consistency():
+    """A message with no landing URL must fail link_consistency as a hard check.
+
+    The link can be normalized when it is *present*; a missing link cannot be
+    normalized away, so it must be an immediate failure rather than silently
+    passing by construction.
+    """
+    from tests.test_generator_agent import CAMPAIGN  # assembled fixture
+
+    campaign = GeneratedCampaign.model_validate(CAMPAIGN.model_dump()).model_copy(
+        update={
+            "messages": [
+                m.model_copy(
+                    update={"call_to_action": m.call_to_action.model_copy(
+                        update={"landing_url": None})}
+                )
+                for m in CAMPAIGN.messages
+            ]
+        }
+    )
+    report = validate_campaign(campaign)
+    by_check = {r.check.value: r for r in report.results}
+    assert by_check["link_consistency"].passed is False
+    assert "no landing link" in by_check["link_consistency"].detail
+
+
 def test_extractor_returns_clean_hex_token():
     """The token extractor yields exactly the 12-hex token, never trailing junk."""
     from validator_agent.links import _token
