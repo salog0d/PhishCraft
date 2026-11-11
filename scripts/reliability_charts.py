@@ -7,7 +7,8 @@ generator passes every structural coherence check by construction, yet the
 *content quality* — quality-scan flags and label-mismatch rates — varies
 measurably across models and temperatures.
 
-Charts rendered to ``diagrams_output/experiment/``:
+Charts are rendered inside the experiment's own folder, next to the dataset
+(``<out>/charts/``), so the report artifacts always travel together:
 
 - quality_flags.png     — failing quality checks per model x temperature
 - label_mismatch.png    — label audit (pretext/tone/difficulty) per model
@@ -33,6 +34,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Charts are written inside the experiment's own directory (next to the
+# dataset), not to a global diagrams_output/. Set by main() from args.out.
+OUT_DIR: Path = REPO_ROOT
 
 # Stable per-model colors (shared with variety_report.py).
 COLORS = {
@@ -85,7 +90,7 @@ def _ok(records: list[dict]) -> list[dict]:
 
 
 def _save(fig, stem: str) -> Path:
-    d = REPO_ROOT / "diagrams_output" / "experiment"
+    d = OUT_DIR / "charts"
     d.mkdir(parents=True, exist_ok=True)
     path = d / f"{stem}.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -291,6 +296,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("out", help="experiment output directory (has runs.jsonl)")
     args = parser.parse_args()
+    global OUT_DIR
+    OUT_DIR = Path(args.out)
     records, _models = _load(Path(args.out))
     charts = [
         chart_quality_flags(records),
@@ -299,7 +306,7 @@ def main() -> int:
         chart_duration(records),
         chart_refinement(records),
     ]
-    print("Generated experiment charts:")
+    print("Generated experiment charts (under the experiment folder):")
     for p in charts:
         print(f"  {p}")
     return 0
