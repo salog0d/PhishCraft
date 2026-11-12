@@ -71,6 +71,7 @@ def _campaign_row(rec: dict, out: Path) -> dict:
     quality = rec.get("quality") or {}
     run_info = rec.get("run_info") or {}
     label_statuses = quality.get("label_statuses") or {}
+    label_predicted = quality.get("label_predicted") or {}
 
     # message content
     email = sms = None
@@ -111,6 +112,11 @@ def _campaign_row(rec: dict, out: Path) -> dict:
         "label_pretext_status": label_statuses.get("pretext"),
         "label_tone_status": label_statuses.get("tone"),
         "label_difficulty_status": label_statuses.get("difficulty"),
+        # honest relabel: what the labeler actually detected (achieved), not
+        # what was requested (spec).
+        "achieved_pretext": label_predicted.get("pretext"),
+        "achieved_tone": label_predicted.get("tone"),
+        "achieved_difficulty": label_predicted.get("difficulty"),
         # refinement + effort evidence
         "n_parse_attempts": run_info.get("n_parse_attempts"),
         "n_refine_rounds": run_info.get("n_refine_rounds"),

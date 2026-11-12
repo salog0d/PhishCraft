@@ -450,6 +450,11 @@ def run_one(run: dict, mission: dict, out: Path, run_timeout: int,
                 "failing": [r.check for r in quality.results if not r.passed],
                 "label_mismatches": list(quality.label_audit.mismatches),
                 "label_statuses": dict(quality.label_audit.statuses),
+                # spec (requested) vs predicted (achieved) labels, for the
+                # honest relabel: the dataset reports what the model actually
+                # produced, not only what was requested.
+                "label_spec": dict(quality.label_audit.spec_labels),
+                "label_predicted": dict(quality.label_audit.predicted_labels),
             },
         )
         (run_dir / "generated_campaign.json").write_text(
@@ -612,6 +617,7 @@ def analyze(rows: list[dict]) -> dict:
     # R6: two separate rates — spec compliance (label audit) vs structural flags.
     spec = defaultdict(lambda: defaultdict(Counter))  # per (model,temp): label -> Counter(status)
     flags = defaultdict(lambda: [0, 0])        # per (model,temp): [flagged, total]
+    achieved = defaultdict(lambda: defaultdict(Counter))  # per (model,temp): label -> Counter(achieved value)
     for r in rows:
         k = _key(r)
         comp[k]["total"] += 1
@@ -639,6 +645,9 @@ def analyze(rows: list[dict]) -> dict:
                 flags[k][0] += 1
             for lab, status in (q.get("label_statuses") or {}).items():
                 spec[k][lab][status] += 1
+            for lab, val in (q.get("label_predicted") or {}).items():
+                if val is not None:
+                    achieved[k][lab][val] += 1
         else:
             comp[k]["failed"] += 1
     # 2. errors by constraint (model x temp x check)
@@ -696,6 +705,16 @@ def analyze(rows: list[dict]) -> dict:
                 for label, c in sorted(labels.items())
             }
             for (m, t), labels in sorted(spec.items())
+        },
+        # Honest relabel: what the labeler actually *achieved* per label,
+        # independent of what was requested. This is the real distribution of
+        # tone/difficulty/pretext in the delivered prose.
+        "achieved_distribution": {
+            f"{m} @ {t}": {
+                label: dict(sorted(c.items()))
+                for label, c in sorted(labels.items())
+            }
+            for (m, t), labels in sorted(achieved.items())
         },
     }
     return out
@@ -776,6 +795,18 @@ def markdown(comp: dict, n_total: int) -> str:
                 f"| {v['unverifiable']} | "
                 f"{v['match_rate'] if v['match_rate'] is not None else '—'} |"
             )
+    lines += ["", "## 6 · Achieved distribution (honest relabel)", "",
+              "What the labeler actually *detected* in the delivered prose,",
+              "independent of what was requested. This is the corpus's real",
+              "label distribution — a consumer should read this column, not only",
+              "the requested `spec` label.",
+              "",
+              "| model × temperature | label | achieved distribution |",
+              "|---|---|---|"]
+    for label, labels in comp["achieved_distribution"].items():
+        for lab, dist in labels.items():
+            pretty = ", ".join(f"{val}:{n}" for val, n in dist.items()) or "(none)"
+            lines.append(f"| {label} | {lab} | {pretty} |")
     return "\n".join(lines) + "\n"
 
 
