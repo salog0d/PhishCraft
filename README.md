@@ -387,6 +387,11 @@ evidence, never repairs.
 |------|------------------------------|
 | `config/q3-awareness-2026.mission.json` | Default `MissionConfig` file (authorized, synthetic-only, seed 42). |
 | `scripts/generate_diagrams.py` | Regenerates the five architecture diagrams into `diagrams_output/`. |
+| `scripts/reliability_matrix.py` | The sensitivity matrix harness: 3 models × 3 temps × 12 cases × 3 seeds = 324 executions, resumable manifest, summary with delivery-guarantee / flags / spec-compliance / achieved-distribution sections. |
+| `scripts/reliability_charts.py` | Renders the experiment's charts into `<out>/charts/`. |
+| `scripts/export_dataset.py` | Exports the campaign corpus + quality scan in json/csv/md plus a Datasheets-for-Datasets datasheet. |
+| `scripts/validate_labeler.py` | Samples campaigns for human gold labels and scores labeler agreement (exact + Cohen's kappa). |
+| `scripts/rescan_quality.py` | Re-runs the quality scan over an existing experiment after a detector fix. |
 | `tests/test_flow_contracts.py` | Business-rule and persistence-rule tests for the schemas. |
 | `tests/test_generator_agent.py` | Offline tests for the deterministic assembler (incl. determinism + token tests). |
 | `tests/test_validator_agent.py` | Regression: the validator must catch the known `abc123` vs `d6db8064874a` link failure. |

@@ -38,7 +38,12 @@ asked to try again blindly.
 | Phase | Trigger | What happens | Bounded by |
 |-------|---------|--------------|------------|
 | **Rejection sampling** | an attempt fails to parse into a valid campaign (echoed placeholder, missing binding) | retried with a stricter format instruction (`STRICT_FORMAT`) | `MAX_ATTEMPTS = 3` |
-| **Self-refinement** | an attempt *parses* but still has: stale tracking tokens (`link_fixes` non-empty), a coherence failure, or a structural quality finding | the campaign is regenerated with an evidence-driven critique appended to the prompt | `REFINE_EXTRA_ATTEMPTS = 2` |
+| **Self-refinement** | an attempt *parses* but still has: stale tracking tokens (`link_fixes` non-empty), a coherence failure, a structural quality finding, **or a tone/difficulty label mismatch** | the campaign is regenerated with an evidence-driven critique appended to the prompt | `REFINE_EXTRA_ATTEMPTS = 2` |
+
+The tone/difficulty label-mismatch signal (`refine_reason="label_mismatch"`) was
+added so the loop reacts to the *real* content failure — the earlier gate only
+looked at links/coherence/meta-bleed, which are ~0 by construction, leaving the
+loop dead.
 
 ### 2.2 Who writes the critique
 
@@ -52,12 +57,14 @@ There are **two** critique builders, chosen by evidence type:
    placeholder".
 
 2. **The critic LLM** (`agent/critic.py`) — a separate reasoning model. Used for
-   **structural** quality findings (`stage_direction`, `meta_bleed`) and any
-   coherence failure the deterministic path does not own. It receives only the
+   **structural** quality findings (`stage_direction`, `meta_bleed`), coherence
+   failures, and `label_mismatch` (tone/difficulty). It receives only the
    evidence (`findings_summary`), and writes a short (≤ 5 sentence) critique:
-   what to remove, what to keep, and the rule about never writing URLs or
-   bracket placeholders. It never repairs content itself and never invents new
-   problems.
+   what to remove, what to keep, and one concrete rewrite instruction per
+   problem. It is explicitly forbidden from using the words phishing /
+   smishing / social engineering (they would re-trigger `meta_bleed`), and a
+   deterministic `_scrub` blanks them as a backstop. It never repairs content
+   itself and never invents new problems.
 
 ### 2.3 The critiquing model
 
@@ -147,12 +154,14 @@ Plus two aggregations:
 
 ### 3.3 Which checks feed back vs. which only record
 
-- **Feedback (into self-refinement):** coherence failures and the structural
-  quality checks `stage_direction` + `meta_bleed` — the only content the
-  generator can meaningfully re-aim at.
-- **Record-only:** `label_audit`, contamination (`pretext`/`name`/`brand`/
-  `script`), and `strip_stats` — evidence the scanner captures but the content
-  agent cannot fix from a critique.
+- **Feedback (into self-refinement):** coherence failures, the structural
+  quality checks `stage_direction` + `meta_bleed`, and the tone/difficulty
+  label mismatch — the content the generator can meaningfully re-aim at.
+  (`pretext` is not fed back: it is decided by the persona selection, not by
+  prose.)
+- **Record-only:** `label_audit` (as *evidence*, including the achieved
+  distribution), contamination (`pretext`/`name`/`brand`/`script`), and
+  `strip_stats` — captured by the scanner but not actionable from a critique.
 
 ---
 

@@ -16,6 +16,7 @@ The docs are organized into five sections.
 |----------|-------------|
 | [Pipeline](./architecture/pipeline.md) | Stage roles (ADK pipeline), phases, and the measurement loop. |
 | [Self-refinement & quality checks](./architecture/self-refinement-and-quality.md) | The Reflexion-style refinement loop (DeepSeek critic) and the two check layers. |
+| [Reliability harness flow](./architecture/harness-flow.md) | Mermaid diagram of the full reliability-matrix harness flow (parent/child, pipeline, refinement, report). |
 
 ### Design — why it was built this way
 
@@ -39,6 +40,7 @@ The docs are organized into five sections.
 | [Org chart](./reference/org-chart.md) | The 12-person internal roster, human-readable. |
 | [Org chart (graph)](./reference/org-chart-graph.md) | Org chart (Mermaid + text tree). |
 | [Monitoring](./reference/monitoring.md) | Observability stack: Grafana + Prometheus + Alertmanager. |
+| [Datasheets for Datasets](./reference/datasheets-for-datasets-spec.md) | The Gebru et al. spec the dataset exporter follows. |
 
 ### Measurements — how to read the results
 
