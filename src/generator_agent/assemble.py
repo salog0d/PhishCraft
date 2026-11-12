@@ -191,13 +191,30 @@ Cross-channel rule:
   or deadline phrasing. Where it references the email, do so in ≤ 6 words.
 
 Tone and difficulty are style contracts, not vibes. Apply the requested `tone`
-and `difficulty` as follows:
-- tone=formal     -> no contractions, no exclamation, third-person reference
-- tone=urgent     -> ≤ 2 sentences in the email body, one hard deadline, imperative verb first
-- tone=executive  -> first-person persona, authority framing, no pleasantries, no salutation
-- tone=casual     -> contractions allowed, one sentence, no salutation
-- difficulty=easy -> no link, no deadline, single ask
-- difficulty=hard -> CTA appears in body once and again in the button; deadline + named consequence
+and `difficulty` as follows. The four tones below are the ONLY valid tones;
+write in the requested one, and make it visibly distinct from the others.
+
+- tone=urgent         -> at most 2 sentences in the email body, one named hard
+  deadline, an imperative verb first, and time pressure ("immediately", "act
+  now", "final notice"). Never sound routine or casual.
+- tone=friendly       -> a warm, helpful register: a light greeting ("hi there",
+  "hope you're well"), a "thank you"/"appreciate it", and no threats or
+  pressure words. Soften any ask.
+- tone=authoritative  -> a firm, official, policy-backed register: cite a rule
+  or requirement ("required", "must", "per company policy", "on behalf of"),
+  use the full name/title of the authority, and state a consequence
+  ("failure to comply"). Imperative but NOT frantic — no time panic.
+- tone=neutral        -> a plain, informative, non-urgent notice: state the
+  fact and the ask once, with "for your information" phrasing, no pressure,
+  no warmth, no authority. Do not add urgency or friendliness.
+
+Difficulty is how many red flags the message exposes. Apply as follows:
+- difficulty=easy     -> a single, soft ask with NO deadline and NO named
+  consequence and NO urgency; the message just informs and asks once, politely.
+- difficulty=medium   -> one named deadline OR one light consequence, but not
+  both; a clear ask with mild time pressure.
+- difficulty=hard     -> a named deadline AND a named consequence, urgency
+  cue(s), and the CTA stated in the body and again in the button.
 
 Anti-repetition block (the negative space is named on purpose):
 - Do not begin any message with "Hi", "Dear", or a bare first name.
