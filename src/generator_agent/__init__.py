@@ -7,8 +7,8 @@
   lazily by ``run`` because it requires the ``lmql`` package.
 - ``run`` — CLI entry point (``python -m generator_agent.run``).
 
-The spec for this stage lives in ``prompts/generator_ag.md``; the constants
-here mirror it and must be kept in sync.
+The charter/spec for this stage is the ``CHARTER`` constant in
+``generator_agent.assemble`` — the single source of truth.
 """
 
 from generator_agent.assemble import assemble_campaign
