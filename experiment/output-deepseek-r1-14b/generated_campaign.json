@@ -1,0 +1,102 @@
+{
+  "campaign_id": "q3-awareness-2026",
+  "persona": {
+    "display_name": "Elena Marchetti",
+    "email": "elena.marchetti@fantazylabz.tech",
+    "role": "Chief Executive Officer",
+    "department": null,
+    "organization": null
+  },
+  "recipient": {
+    "email": "rajesh.kapoor@fantazylabz.tech",
+    "full_name": "Rajesh Kapoor",
+    "role": "Chief Technology Officer",
+    "department": "Engineering"
+  },
+  "messages": [
+    {
+      "message_id": "msg-0001",
+      "channel": "email",
+      "scheduled_at": "2026-08-20T09:00:00Z",
+      "sender": {
+        "display_name": "Elena Marchetti",
+        "from_address": "elena.marchetti@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": "Urgent: Action Required on Quarterly Report",
+      "body": "Rajesh, please review and approve the attached quarterly-report-Q3-38.pdf as soon as possible. Your prompt action is needed to avoid delays in the board pack. Use https://sim.fantazylabz.tech/t/8b9dc310f705 to submit your approval before 10:15 today.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/8b9dc310f705",
+        "button_label": "Review Summary"
+      },
+      "references": [],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "deepseek-r1:14b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.9,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 42
+        },
+        "prompt_template_id": "tpl-0001",
+        "prompt_hash": "9a19139075dbf15c8135323dd08fff76ce298a110293753dfbdd05660b16bdcf",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    },
+    {
+      "message_id": "msg-0002",
+      "channel": "sms",
+      "scheduled_at": "2026-08-20T10:15:00Z",
+      "sender": {
+        "display_name": "Elena Marchetti",
+        "from_address": "elena.marchetti@fantazylabz.tech",
+        "impersonated_brand": null
+      },
+      "subject": null,
+      "body": "Follow-up: Your approval of quarterly-report-Q3-38.pdf is still pending. Multiple executives have already completed theirs. Confirm via the link from the email.",
+      "call_to_action": {
+        "type": "click_link",
+        "landing_url": "https://sim.fantazylabz.tech/t/8b9dc310f705",
+        "button_label": "Review Summary"
+      },
+      "references": [
+        "msg-0001"
+      ],
+      "link_fixes": [],
+      "provenance": {
+        "model": {
+          "family": "local",
+          "name": "deepseek-r1:14b",
+          "adapter_version": "1.0"
+        },
+        "params": {
+          "temperature": 0.9,
+          "top_p": 1.0,
+          "max_tokens": 1024,
+          "seed": 42
+        },
+        "prompt_template_id": "tpl-0002",
+        "prompt_hash": "9a19139075dbf15c8135323dd08fff76ce298a110293753dfbdd05660b16bdcf",
+        "generated_at": "2026-08-20T09:00:00Z",
+        "adapter_latency_ms": null,
+        "runtime": {
+          "sdk": "google-adk",
+          "adapter": "adk",
+          "seed_supported": "false"
+        }
+      }
+    }
+  ]
+}
