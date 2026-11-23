@@ -355,7 +355,6 @@ evidence, never repairs.
 
 | File | What it is / why it matters |
 |------|------------------------------|
-| `prompts/generator_ag.md` | The content agent's charter (few-shot examples the LLM conditions on). |
 | `prompts/validator_ag.md` | Documentation-parity charter for the 5 checks; the code module is authoritative. |
 | `prompts/orchestrator_ag.md` | Non-executable design note: the orchestrator is the ADK `SequentialAgent`. |
 

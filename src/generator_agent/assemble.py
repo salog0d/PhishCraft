@@ -158,7 +158,7 @@ def variation_axes(
 
 
 # --------------------------------------------------------------------------- #
-# Charter constants — mirror prompts/generator_ag.md (keep in sync).
+# Charter constants — this module's CHARTER is the single source of truth.
 # --------------------------------------------------------------------------- #
 
 CHARTER = """You are the Generation Agent (Generator-AG) for a controlled phishing-simulation generator.
