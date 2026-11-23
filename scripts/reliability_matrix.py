@@ -12,16 +12,18 @@ Design:
   ``OLLAMA_API_BASE`` — leave it unset for localhost, or point it at a remote
   Ollama (an Azure VM serving models) for cloud runs. The critic follows
   ``ADK_CRITIC_MODEL`` the same way.
-- **Temperatures**: 0.0, 0.5, 1.0.
-- **Cases**: 12 fixed specs (3 per pretext, from 4 base pretexts).
-- **Repetitions**: 3 per combination, seeds 101/202/303, the same across
-  conditions.
+- **Temperature**: fixed at 0.0 (one axis at a time — only the model varies).
+- **Cases**: 10 fixed specs.
+- **Repetitions**: 5 per combination, seeds 101/202/303/404/505, the same
+  across conditions.
 - **Output limit**: 4096 tokens per generator call.
 
-So each (model, temperature, case) runs at 3 seeds → 3*3*12*3 = 324 executions.
-The case is invariant: same recipient, context, entities, constraints and
-content requirements. Only model, temperature and seed change; every execution
-starts in a fresh session.
+So the matrix is 10 specs × 5 seeds × N model families (≥2) → with the 3
+default families, 10*5*3 = 150 executions. The case is invariant: same
+recipient, context, entities, constraints and content requirements. Only the
+model and seed change; every execution starts in a fresh session. Each run
+records its model tag+quant, temperature, seed, prompt hash (``trace.prompt_sha256``)
+and the harness ``git_commit``.
 
 Every run goes through the real ADK pipeline (``agent.driver``) and the
 post-run quality scan (``quality_agent.scan``). Besides the final artifacts,
@@ -34,13 +36,13 @@ Usage:
     # verify the provider actually receives temperature / max_tokens / seed
     python scripts/reliability_matrix.py --verify
 
-    # run everything over a remote Ollama (e.g. an Azure VM):
+    # THE ONE COMMAND to run on the VM — runs the full matrix, then writes
+    # the report (summary.md/json, master_table.json) and charts/ itself:
     #   OLLAMA_API_BASE=http://<vm-ip>:11434 \
-    #   python scripts/reliability_matrix.py \
-    #     --models ollama/qwen3:14b,ollama/llama3.1:70b
+    #   python scripts/reliability_matrix.py
     python scripts/reliability_matrix.py --out experiment/reliability-<ts>
 
-    # regenerate the aggregate report + summaries from a finished/paused run
+    # (only if you need to re-aggregate a finished/paused run by hand)
     python scripts/reliability_matrix.py --report experiment/reliability-<ts>
 """
 
@@ -73,8 +75,8 @@ DEFAULT_MODELS = (
     "llama3.1:8b-q4km-20261110",     # 8.0B Q4_K_M — sha256 667b0c19…
     "phi4-mini:3.8b-q4km-20261110",  # 3.8B Q4_K_M — sha256 3c168af1…
 )
-TEMPERATURES = (0.0,)  # pilot: seed variability only, no temperature sweep
-SEEDS = (101, 202, 303)
+TEMPERATURES = (0.0,)  # one axis at a time: temperature fixed, only model varies
+SEEDS = (101, 202, 303, 404, 505)  # 5 fixed seeds (rep count for the CIs)
 MAX_TOKENS = 4096
 LANGUAGE = "en"
 START_AT = "2026-08-20T09:00:00Z"
@@ -82,13 +84,19 @@ FOLLOWUP_MINUTES = 75
 DEFAULT_RUN_TIMEOUT_S = 600
 DEFAULT_WORKERS = 1
 
-# 8 fixed cases: one representative spec per pretext (tono + difficulty + recipient).
+# 10 fixed cases: one representative spec per pretext (tono + difficulty + recipient).
 # Recipients are fixed so every model receives the identical case and recipient.
+# NOTE (rule 3 — discriminating specs): these must actually produce raw
+# violations in the pre-assembler output, or the matrix measures nothing. If a
+# finished run shows raw_link_violations == 0 across every model, the specs were
+# too easy — harden them (shorter deadlines, more cross-channel refs, stricter
+# link/entity constraints) before trusting the result. Config alone can't
+# guarantee this; it's a content-design call that needs a run to confirm.
 CASES = (
     # executive_request (BEC — manager impersonation)
-    ("C01", "executive_request", "urgent", "medium", 40),
+    ("C01", "executive_request", "urgent", "hard", 40),
     # invoice_payment (BEC — supplier)
-    ("C02", "invoice_payment", "authoritative", "medium", 24),
+    ("C02", "invoice_payment", "authoritative", "hard", 24),
     # account_suspension (consumer — bank)
     ("C03", "account_suspension", "urgent", "hard", 41),
     # password_reset (consumer — help desk)
@@ -96,16 +104,41 @@ CASES = (
     # shared_document (BEC — manager impersonation)
     ("C05", "shared_document", "neutral", "medium", 40),
     # it_support (help desk)
-    ("C06", "it_support", "authoritative", "medium", 41),
+    ("C06", "it_support", "authoritative", "hard", 41),
     # hr_notice (People Ops)
     ("C07", "hr_notice", "authoritative", "medium", 40),
     # package_delivery (carrier)
     ("C08", "package_delivery", "neutral", "medium", 24),
+    # shared_document (BEC — manager impersonation), harder variant
+    ("C09", "shared_document", "urgent", "hard", 24),
+    # it_support (help desk), urgent variant
+    ("C10", "it_support", "urgent", "hard", 25),
 )
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+import functools
+from hashlib import sha256
+
+
+@functools.lru_cache(maxsize=1)
+def git_commit() -> str:
+    """HEAD commit of the harness code, stamped on the plan and every run so a
+    number can always be traced back to the code that produced it (rule 6).
+    ``unknown`` if git is unavailable or the tree isn't a repo."""
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT,
+            stderr=subprocess.DEVNULL).decode().strip()
+        dirty = subprocess.call(
+            ["git", "diff", "--quiet"], cwd=REPO_ROOT,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return sha + ("-dirty" if dirty else "")
+    except Exception:  # noqa: BLE001 — provenance is best-effort, never fatal
+        return "unknown"
 
 
 def sanitize(name: str) -> str:
@@ -259,6 +292,7 @@ def build_plan(models: list[str]) -> dict:
         run["run_id"] += f"-t{run['temperature']}-s{run['seed']}"
     return {
         "generated_at": utc_now(),
+        "git_commit": git_commit(),
         "design": {
             "models": models,
             "temperatures": list(TEMPERATURES),
@@ -307,6 +341,7 @@ def trace_summary(run_dir: Path) -> dict:
     records = _read_trace(run_dir / "llm_trace.jsonl")
     first_raw = None
     first_readable = None
+    prompt_sha256 = None  # hash of the first generator prompt actually sent
     generator_calls = critic_calls = 0
     prompt_tokens = completion_tokens = total_tokens = 0
     total_s = 0.0
@@ -326,9 +361,16 @@ def trace_summary(run_dir: Path) -> dict:
         text = response.get("text")
         if text and first_raw is None and agent != "critic":
             first_raw = text
+        if prompt_sha256 is None and agent != "critic":
+            req = rec.get("request") or {}
+            blob = json.dumps(
+                [req.get("system_instruction"), req.get("contents")],
+                sort_keys=True, ensure_ascii=False).encode()
+            prompt_sha256 = sha256(blob).hexdigest()
     # first_readable is set by the runner from the parsed campaign; leave None.
     return {
         "first_raw_response": first_raw,
+        "prompt_sha256": prompt_sha256,
         "generator_calls": generator_calls,
         "critic_calls": critic_calls,
         "prompt_tokens": prompt_tokens,
@@ -414,6 +456,7 @@ def run_one(run: dict, mission: dict, out: Path, run_timeout: int,
         "difficulty": run["difficulty"],
         "recipient_id": run["recipient_id"],
         "config": spec,
+        "git_commit": git_commit(),
         "status": "ok",
         "ran_at": utc_now(),
         "error": None,
@@ -597,8 +640,18 @@ def run_parent(out: Path, models: list[str], workers: int, run_timeout: int,
                     .read_text(encoding="utf-8").splitlines()
                 for line in lines[-6:]:
                     print(f"     {line}")
-    print(f"\ndone. aggregate report:")
-    print(f"  python scripts/reliability_matrix.py --report {out}")
+    # One command on the VM: aggregate the report and render the charts here,
+    # so the run leaves a finished dataset (summary.md + charts/) with no
+    # follow-up step to remember.
+    print("\nruns done — aggregating report + charts")
+    run_report(out)
+    try:
+        subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "reliability_charts.py"),
+             str(out)], cwd=REPO_ROOT, check=True)
+    except Exception as exc:  # noqa: BLE001 — charts are optional, data is the deliverable
+        print(f"  (charts skipped: {type(exc).__name__}: {exc})")
+    print(f"\ndone. dataset: {out}")
     return 0
 
 

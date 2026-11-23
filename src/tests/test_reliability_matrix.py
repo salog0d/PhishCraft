@@ -45,6 +45,22 @@ def test_wilson_ci_bounds_and_overlap():
     assert lo_a < hi_b and lo_b < hi_a  # intervals overlap
 
 
+def test_provenance_prompt_hash_and_commit(tmp_path):
+    # Rule 4: each run must carry a prompt hash; the plan carries git_commit.
+    import json
+    trace = tmp_path / "llm_trace.jsonl"
+    rec = {"agent": "generator_content_agent",
+           "request": {"system_instruction": "sys", "contents": ["hi"]},
+           "response": {"text": "ok", "usage": {}}}
+    trace.write_text(json.dumps(rec) + "\n", encoding="utf-8")
+    summary = rm.trace_summary(tmp_path)
+    assert summary["prompt_sha256"] and len(summary["prompt_sha256"]) == 64
+    # Same prompt -> same hash; critic-only traces -> no hash.
+    assert rm.trace_summary(tmp_path)["prompt_sha256"] == summary["prompt_sha256"]
+    assert rm.git_commit()  # never empty: a sha, "...-dirty", or "unknown"
+    assert rm.build_plan(["qwen3:8b"])["git_commit"] == rm.git_commit()
+
+
 def test_ollama_has_is_best_effort(monkeypatch):
     from agent import config
 
