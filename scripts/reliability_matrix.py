@@ -73,7 +73,7 @@ DEFAULT_MODELS = (
     "llama3.1:8b-q4km-20261110",     # 8.0B Q4_K_M — sha256 667b0c19…
     "phi4-mini:3.8b-q4km-20261110",  # 3.8B Q4_K_M — sha256 3c168af1…
 )
-TEMPERATURES = (0.0, 0.5, 1.0)
+TEMPERATURES = (0.0,)  # pilot: seed variability only, no temperature sweep
 SEEDS = (101, 202, 303)
 MAX_TOKENS = 4096
 LANGUAGE = "en"
@@ -82,26 +82,25 @@ FOLLOWUP_MINUTES = 75
 DEFAULT_RUN_TIMEOUT_S = 600
 DEFAULT_WORKERS = 1
 
-# 12 fixed cases: (case_id, pretext, tone, difficulty, recipient_id).
-# 3 specs per pretext, from 4 base pretexts. Recipients are fixed so every
-# model receives the identical case and recipient.
+# 8 fixed cases: one representative spec per pretext (tono + difficulty + recipient).
+# Recipients are fixed so every model receives the identical case and recipient.
 CASES = (
-    # executive_request (BEC)
+    # executive_request (BEC — manager impersonation)
     ("C01", "executive_request", "urgent", "medium", 40),
-    ("C02", "executive_request", "authoritative", "hard", 24),
-    ("C03", "executive_request", "neutral", "easy", 11),
-    # invoice_payment (BEC)
-    ("C04", "invoice_payment", "friendly", "easy", 40),
-    ("C05", "invoice_payment", "authoritative", "medium", 24),
-    ("C06", "invoice_payment", "urgent", "hard", 11),
-    # account_suspension (consumer)
-    ("C07", "account_suspension", "urgent", "hard", 41),
-    ("C08", "account_suspension", "neutral", "medium", 25),
-    ("C09", "account_suspension", "friendly", "easy", 12),
-    # password_reset (consumer)
-    ("C10", "password_reset", "neutral", "easy", 41),
-    ("C11", "password_reset", "urgent", "medium", 25),
-    ("C12", "password_reset", "authoritative", "hard", 12),
+    # invoice_payment (BEC — supplier)
+    ("C02", "invoice_payment", "authoritative", "medium", 24),
+    # account_suspension (consumer — bank)
+    ("C03", "account_suspension", "urgent", "hard", 41),
+    # password_reset (consumer — help desk)
+    ("C04", "password_reset", "neutral", "medium", 25),
+    # shared_document (BEC — manager impersonation)
+    ("C05", "shared_document", "neutral", "medium", 40),
+    # it_support (help desk)
+    ("C06", "it_support", "authoritative", "medium", 41),
+    # hr_notice (People Ops)
+    ("C07", "hr_notice", "authoritative", "medium", 40),
+    # package_delivery (carrier)
+    ("C08", "package_delivery", "neutral", "medium", 24),
 )
 
 
@@ -123,9 +122,17 @@ def model_slug(model: str) -> str:
     base name with the version suffix (``-q4km-YYYYMMDD``) stripped.
     """
     name = model_ref(model)[1]  # bare name, no provider/ prefix
-    # drop a trailing frozen-tag suffix like `-q4km-20261110` or `-Q4_K_M`
+    # Drop trailing version/quantization suffixes: `-q4km-20261110`, `-Q4_K_M`,
+    # and the longer Minstral-style `-instruct-2512-q8_0`. Multi-pass so a name
+    # with several stacked suffixes shrinks to its base (still unique per model).
     import re
-    name = re.sub(r"-[A-Za-z0-9]{2,}-?\d{8}$", "", name)
+    for _ in range(3):
+        shorter = re.sub(
+            r"-(?:instruct|q\d[_-]?k?_?m?|q\d_\d|fp16|f\d{8}|\d{8}|\d{4}-\d{2}-\d{2})"
+            r"[A-Za-z0-9_-]*$", "", name)
+        if shorter == name:
+            break
+        name = shorter
     return sanitize(name)
 
 
@@ -514,7 +521,52 @@ def run_child(out: Path, model_index: int, run_timeout: int) -> int:
 # --------------------------------------------------------------------------- #
 
 
-def run_parent(out: Path, models: list[str], workers: int, run_timeout: int) -> int:
+def preflight(models: list[str]) -> tuple[bool, str]:
+    """Fail loud *before* a multi-hour run: every matrix model must answer on
+    the real host, and the critic must be reachable (or its absence declared).
+
+    This is the guard for the class of silent failure that has cost whole runs:
+    a model tag that does not resolve, a critic that falls back without anyone
+    noticing. It makes the run refuse to start on an unreachable model instead
+    of burning hours producing runs that are secretly degraded.
+
+    Returns ``(all_models_ok, critic_status)``; ``critic_status`` is one of
+    ``reachable`` / ``MISSING (will fall back to the generator)``.
+    """
+    print("preflight:")
+    all_ok = True
+    for model in models:
+        result = verify_provider(model)
+        if "error" in result:
+            print(f"  model {model}: UNREACHABLE — {result['error']}")
+            all_ok = False
+        else:
+            print(f"  model {model}: ok (eval_count={result.get('eval_count')})")
+
+    from agent.config import DEFAULT_CRITIC_MODEL
+
+    critic = os.getenv("ADK_CRITIC_MODEL", DEFAULT_CRITIC_MODEL)
+    critic_status = "reachable"
+    if critic.startswith("ollama/"):
+        probe = verify_provider(critic[len("ollama/"):])
+        if "error" in probe:
+            critic_status = "MISSING (will fall back to the generator)"
+    print(f"  critic {critic}: {critic_status}")
+    return all_ok, critic_status
+
+
+def run_parent(out: Path, models: list[str], workers: int, run_timeout: int,
+               skip_preflight: bool = False) -> int:
+    if not skip_preflight:
+        models_ok, critic_status = preflight(models)
+        if not models_ok:
+            print("\nABORT: one or more models are unreachable on the configured "
+                  "host. Fix the model tag / OLLAMA_API_BASE, or pass "
+                  "--skip-preflight to run anyway.")
+            return 2
+        if critic_status != "reachable":
+            print("  (proceeding; the critic fallback is now explicit, not silent)")
+        print()
     out.mkdir(parents=True, exist_ok=True)
     plan = build_plan(models)
     (out / "plan.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
@@ -608,6 +660,30 @@ def _key(r):
     return (r["model"], r["temperature"])
 
 
+def wilson_ci(successes: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
+    """95% Wilson score interval for a binomial proportion (None if n == 0).
+
+    Wilson, not the normal approximation: with the 3-seeds-per-cell counts in
+    this matrix the normal interval is wrong (it can exceed [0, 1] and badly
+    under-covers near 0 and 1). The interval is what makes a between-model
+    difference interpretable — two cells whose CIs overlap are *not* a
+    distinguishable result at this sample size, no matter how far the point
+    rates sit apart.
+    """
+    if n == 0:
+        return None
+    p = successes / n
+    denom = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
+    return (round(max(0.0, center - half), 4), round(min(1.0, center + half), 4))
+
+
+def _ci_str(ci: tuple[float, float] | None) -> str:
+    """Render a CI tuple for a markdown cell."""
+    return "—" if ci is None else f"[{ci[0]:.2f}–{ci[1]:.2f}]"
+
+
 def analyze(rows: list[dict]) -> dict:
     # 1. Delivery guarantee by model x temperature (completed runs only).
     comp = defaultdict(lambda: {"total": 0, "ok": 0, "failed": 0,
@@ -662,6 +738,7 @@ def analyze(rows: list[dict]) -> dict:
                 "compliance_rate_among_completed": (
                     round(v["all_passed"] / v["completed"], 4) if v["completed"] else None
                 ),
+                "compliance_ci95": wilson_ci(v["all_passed"], v["completed"]),
             }
             for (m, t), v in sorted(comp.items())
         },
@@ -689,6 +766,7 @@ def analyze(rows: list[dict]) -> dict:
                 "flagged": v[0],
                 "total": v[1],
                 "flag_rate": round(v[0] / v[1], 4) if v[1] else None,
+                "flag_rate_ci95": wilson_ci(v[0], v[1]),
             }
             for (m, t), v in sorted(flags.items())
         },
@@ -701,6 +779,7 @@ def analyze(rows: list[dict]) -> dict:
                     "total": sum(c.values()),
                     "match_rate": round(c.get("ok", 0) / sum(c.values()), 4)
                     if sum(c.values()) else None,
+                    "match_rate_ci95": wilson_ci(c.get("ok", 0), sum(c.values())),
                 }
                 for label, c in sorted(labels.items())
             }
@@ -737,14 +816,15 @@ def markdown(comp: dict, n_total: int) -> str:
         "Rates are computed **among completed campaigns**; failed/timeout runs are",
         "listed separately so a guarantee number never hides dropped executions.",
         "",
-        "| model × temperature | total | completed | failed/timeout | all_passed | rate (completed) |",
-        "|---|---|---|---|---|---|",
+        "| model × temperature | total | completed | failed/timeout | all_passed | rate (completed) | 95% CI |",
+        "|---|---|---|---|---|---|---|",
     ]
     for label, v in comp["compliance"].items():
         rate = v["compliance_rate_among_completed"]
         lines.append(
             f"| {label} | {v['total']} | {v['completed']} | {v['failed_or_timeout']} "
-            f"| {v['all_passed']} | {rate if rate is not None else '—'} |"
+            f"| {v['all_passed']} | {rate if rate is not None else '—'} "
+            f"| {_ci_str(v.get('compliance_ci95'))} |"
         )
     lines += ["", "## 2 · Errors by constraint (model × temperature × check)", ""]
     if comp["errors_by_constraint"]:
@@ -774,26 +854,34 @@ def markdown(comp: dict, n_total: int) -> str:
               "Share of completed campaigns with ≥1 quality-scan finding (the",
               "content-quality signal, independent of the structural guarantee).",
               "",
-              "| model × temperature | flagged | total | flag rate |",
-              "|---|---|---|---|"]
+              "| model × temperature | flagged | total | flag rate | 95% CI |",
+              "|---|---|---|---|---|"]
     for label, v in comp["structural_flags"].items():
         lines.append(
             f"| {label} | {v['flagged']} | {v['total']} | "
-            f"{v['flag_rate'] if v['flag_rate'] is not None else '—'} |"
+            f"{v['flag_rate'] if v['flag_rate'] is not None else '—'} | "
+            f"{_ci_str(v.get('flag_rate_ci95'))} |"
         )
     lines += ["", "## 5 · Spec compliance (label audit) — separate from the guarantee", "",
               "`match_rate` = share of completed campaigns whose generated prose",
               "the deterministic labeler reads as matching the requested label.",
               "(`unverifiable` = no signal; not counted as a match.)",
               "",
-              "| model × temperature | label | ok | mismatch | unverifiable | match rate |",
-              "|---|---|---|---|---|---|"]
+              "> **Reading the CI:** two rows whose 95% CIs overlap are **not** a",
+              "> distinguishable difference at this sample size — the point rates",
+              "> can look far apart and still be noise. The CI also depends on the",
+              "> labeler being calibrated (see the gold-label validation); it",
+              "> quantifies sampling error, not the labeler's own bias.",
+              "",
+              "| model × temperature | label | ok | mismatch | unverifiable | match rate | 95% CI |",
+              "|---|---|---|---|---|---|---|"]
     for label, labels in comp["spec_compliance"].items():
         for lab, v in labels.items():
             lines.append(
                 f"| {label} | {lab} | {v['ok']} | {v['mismatch']} "
                 f"| {v['unverifiable']} | "
-                f"{v['match_rate'] if v['match_rate'] is not None else '—'} |"
+                f"{v['match_rate'] if v['match_rate'] is not None else '—'} | "
+                f"{_ci_str(v.get('match_rate_ci95'))} |"
             )
     lines += ["", "## 6 · Achieved distribution (honest relabel)", "",
               "What the labeler actually *detected* in the delivered prose,",
@@ -961,6 +1049,8 @@ def main() -> None:
                         help="model children running in parallel")
     parser.add_argument("--run-timeout", type=int, default=DEFAULT_RUN_TIMEOUT_S,
                         help="wall-clock seconds per execution")
+    parser.add_argument("--skip-preflight", action="store_true",
+                        help="skip the model/critic reachability check before the run")
     args = parser.parse_args()
 
     if args.verify:
@@ -985,7 +1075,8 @@ def main() -> None:
         raise SystemExit("no models — is the Ollama daemon running?")
     out = Path(args.out or
                f"experiment/reliability-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
-    raise SystemExit(run_parent(out, models, args.workers, args.run_timeout))
+    raise SystemExit(run_parent(out, models, args.workers, args.run_timeout,
+                                skip_preflight=args.skip_preflight))
 
 
 if __name__ == "__main__":

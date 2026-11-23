@@ -163,6 +163,18 @@ Plus two aggregations:
   distribution), contamination (`pretext`/`name`/`brand`/`script`), and
   `strip_stats` — captured by the scanner but not actionable from a critique.
 
+### 3.4 Inter-run diversity (mode-collapse evidence)
+
+The scan's `loop_detection` catches repetition *inside* one campaign. The
+complementary failure — a generator that rewrites the *same* email across many
+runs of a pretext — is measured by `quality_agent/diversity.py` and reported
+per pretext in the quality summary: **distinct-1/distinct-2** (unique n-grams /
+total; Li et al. 2016) and **mean pairwise similarity** (average `difflib`
+ratio over every campaign pair). It needs repeats (`--runs > 1`) to mean
+anything and is evidence, never pass/fail: a high mean pairwise similarity is
+the homogenization signal (Padmakumar & He 2024), the cheap stdlib stand-in for
+Self-BLEU.
+
 ---
 
 ## 4. Reading the reliability matrix with this in mind
@@ -176,7 +188,7 @@ For each execution the harness records:
 | `n_attempts` | `n_parse_attempts` + `n_refine_rounds` (back-compat total) |
 | `refined` | whether any self-refinement round ran |
 | `refine_reason` | which signal triggered refinement (`link_violation`, `structural`, or both) |
-| `refinement_improved` | whether quality flags dropped after the critique (real success measure) |
+| `refinement_improved` | whether the *severity the round fired on* dropped after the critique — structural quality flags **plus** the tone/difficulty label mismatches that trigger refinement (not just `n_flags`, which excludes label mismatches and so could never register a label-driven round as improved) |
 | `critic_calls` | how many times the critic LLM was invoked |
 | `generator_calls` | how many times the content LLM was invoked |
 | `total_tokens` | tokens across generator + critic (effort) |

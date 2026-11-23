@@ -77,17 +77,19 @@ def resolve_critic_model():
 
 
 def _ollama_has(name: str) -> bool:
-    """True when ``name`` is in the local Ollama model list (best-effort)."""
-    import subprocess
+    """True when ``name`` is in the resolved Ollama model list (best-effort).
 
+    Queries the host LiteLLM actually uses (``OLLAMA_API_BASE`` -> localhost),
+    not the local ``ollama`` CLI, so critic-only models served by a remote VM
+    are found instead of falling back to the generator.
+    """
+    import json
+    import urllib.request
+
+    base = os.getenv("OLLAMA_API_BASE", "http://localhost:11434").rstrip("/")
     try:
-        out = subprocess.run(
-            ["ollama", "list"], capture_output=True, text=True, timeout=5
-        ).stdout
-    except (FileNotFoundError, subprocess.SubprocessError):
+        with urllib.request.urlopen(f"{base}/api/tags", timeout=5) as resp:
+            payload = json.loads(resp.read().decode())
+    except (OSError, ValueError):
         return False
-    for line in out.splitlines()[1:]:
-        fields = line.split()
-        if fields and fields[0] == name:
-            return True
-    return False
+    return any(m.get("name") == name for m in payload.get("models", []))

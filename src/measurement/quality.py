@@ -36,6 +36,7 @@ from typing import Union
 from measurement.adapters import get_adapter
 from measurement.runner import run_spec
 from measurement.specs import baseline_specs
+from quality_agent.diversity import diversity_report
 from quality_agent.scan import CHECK_NAMES as QUALITY_CHECKS
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -117,6 +118,22 @@ def run(
                 if status == "unverifiable":
                     label_mismatch[f"{label} (unverifiable)"] += 1
 
+    # Inter-run diversity per pretext (mode-collapse evidence): distinct-n and
+    # mean pairwise similarity over the campaigns the generator wrote for each
+    # pretext. Only meaningful with repeats, so it is reported as evidence,
+    # never a pass/fail — a high mean pairwise similarity means the model keeps
+    # rewriting one template.
+    prose_by_pretext = defaultdict(list)
+    for r in ok:
+        if r.prose:
+            prose_by_pretext[
+                (r.quality_report or {}).get("pretext") or "unknown"
+            ].append(r.prose)
+    diversity = {
+        pretext: diversity_report(texts)
+        for pretext, texts in sorted(prose_by_pretext.items())
+    }
+
     n_quality = sum(1 for r in ok if r.quality_flags > 0)
     n_contaminated = sum(1 for r in ok if r.contamination)
     n_label = sum(1 for r in ok if r.label_mismatches)
@@ -169,6 +186,8 @@ def run(
             label: dict(counts.most_common(5))
             for label, counts in per_label_corrections.items()
         },
+        # Inter-run diversity (mode-collapse evidence; needs repeats to be useful).
+        "diversity_by_pretext": diversity,
         # Stripping (measured on a copy, never applied).
         "n_campaigns_with_strip_affected": n_strip,
         "strip_affected_rate": round(n_strip / len(ok), 4) if ok else None,
@@ -285,6 +304,23 @@ def run(
                     f"{spec}->{n}" for spec, n in corrections[label].items()
                 )
                 lines.append(f"- `{label}`: {detail}")
+    lines += [
+        "",
+        "## Inter-run diversity by pretext (mode-collapse evidence)",
+        "",
+        "Higher `distinct-2` and lower `mean pairwise similarity` = more varied."
+        " Needs repeats (`--runs > 1`) to be meaningful; `—` means too few.",
+        "",
+        "| pretext | n | distinct-1 | distinct-2 | mean pairwise sim |",
+        "|---|---|---|---|---|",
+    ]
+    for pretext, d in payload["diversity_by_pretext"].items():
+        def _f(x):
+            return "—" if x is None else f"{x}"
+        lines.append(
+            f"| `{pretext}` | {d['n']} | {_f(d['distinct_1'])} | "
+            f"{_f(d['distinct_2'])} | {_f(d['mean_pairwise_similarity'])} |"
+        )
     lines += [
         "",
         "## Stage-direction stripping (measured on a copy, never applied)",
