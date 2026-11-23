@@ -17,21 +17,20 @@ cd "$(dirname "$0")/.."
 echo "== python deps =="
 python -m pip install -q -r requirements.txt
 
-echo "== freeze model tags (ollama cp; no-op if they already exist) =="
-# base tag -> frozen tag (must match DEFAULT_MODELS + the critic in the script)
-freeze() {  # $1=base  $2=frozen
-  if ollama list | grep -q "^$2[[:space:]]"; then
-    echo "  $2: present"
+echo "== ensure models present (pull if missing) =="
+# must match DEFAULT_MODELS + the critic. 3 generators + deepseek critic.
+need() {  # $1=tag
+  if ollama list | grep -q "^$1[[:space:]]"; then
+    echo "  $1: present"
   else
-    echo "  $1 -> $2"
+    echo "  pull $1"
     ollama pull "$1"
-    ollama cp "$1" "$2"
   fi
 }
-freeze qwen3:8b          qwen3:8b-q4km-20261110
-freeze llama3.1:8b       llama3.1:8b-q4km-20261110
-freeze phi4-mini:latest  phi4-mini:3.8b-q4km-20261110
-freeze deepseek-r1:7b    deepseek-r1:7b-q4km-20261110
+need qwen3:14b
+need phi4:14b
+need ministral-3:14b-instruct-2512-q8_0
+need deepseek-r1:14b   # critic (self-refinement)
 
 echo
 echo "setup done. run the matrix with:"
