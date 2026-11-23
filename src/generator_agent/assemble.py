@@ -241,7 +241,7 @@ line breaks inside a body. The names, subjects and bodies below are examples
 only: never copy them, replace every concrete value in them with the values
 from the user message.
 
-**Example 1 — email then SMS, pretext: invoice_payment, tone: formal, difficulty: easy**
+**Example 1 — email then SMS, pretext: invoice_payment, tone: neutral, difficulty: easy**
 ```
 display name: Northwind Accounts Payable
 role: Accounts Payable
@@ -265,7 +265,7 @@ body: Revalidation still open — new failure count added since the email. Use {
 scheduled at: 2026-08-20T14:52:00Z
 ```
 
-**Example 3 — email then SMS, pretext: executive_request, tone: executive, difficulty: hard**
+**Example 3 — email then SMS, pretext: executive_request, tone: authoritative, difficulty: hard**
 ```
 display name: Elena Marchetti
 role: Chief Executive Officer
