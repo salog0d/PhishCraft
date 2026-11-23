@@ -71,9 +71,9 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 # Frozen model tags (see docs/reference/model-versions.md). Never ``latest``: these are
 # immutable `ollama cp` snapshots so the whole matrix is reproducible.
 DEFAULT_MODELS = (
-    "qwen3:8b-q4km-20261110",        # 8.2B Q4_K_M — sha256 a3de86cd…
-    "llama3.1:8b-q4km-20261110",     # 8.0B Q4_K_M — sha256 667b0c19…
-    "phi4-mini:3.8b-q4km-20261110",  # 3.8B Q4_K_M — sha256 3c168af1…
+    "qwen3:14b",
+    "phi4:14b",
+    "ministral-3:14b-instruct-2512-q8_0",
 )
 TEMPERATURES = (0.0,)  # one axis at a time: temperature fixed, only model varies
 SEEDS = (101, 202, 303, 404, 505)  # 5 fixed seeds (rep count for the CIs)

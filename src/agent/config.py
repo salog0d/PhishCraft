@@ -26,8 +26,7 @@ DEFAULT_MODEL = os.getenv("ADK_MODEL", "gemini-2.5-flash")
 # The self-refinement critic: a reasoning model better at turning precise
 # deterministic findings into corrective instructions than the generalist
 # generator. Falls back to the generator model when missing (offline).
-# Frozen critic tag (see docs/reference/model-versions.md) — never ``latest``.
-DEFAULT_CRITIC_MODEL = "ollama/deepseek-r1:7b-q4km-20261110"
+DEFAULT_CRITIC_MODEL = "ollama/deepseek-r1:14b"
 
 
 def resolve_model():
