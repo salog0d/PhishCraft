@@ -228,7 +228,10 @@ def verify_provider(model: str) -> dict:
         "model": model,
         "prompt": "Reply with the single word: ok",
         "stream": False,
-        "options": {"temperature": 0.0, "seed": 101, "num_predict": MAX_TOKENS},
+        # ponytail: probe caps num_predict at 64 — reachability + param echo
+        # only. Reasoning models (qwen3/deepseek) would emit a long <think>
+        # trace at MAX_TOKENS and blow the timeout cold-loading a 14b.
+        "options": {"temperature": 0.0, "seed": 101, "num_predict": 64},
     }
     req = urllib.request.Request(
         f"{url}/api/generate",
@@ -236,7 +239,7 @@ def verify_provider(model: str) -> dict:
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=180) as resp:
             return json.loads(resp.read().decode())
     except Exception as exc:  # noqa: BLE001 — verification must never crash the run
         return {"error": f"{type(exc).__name__}: {exc}"}
