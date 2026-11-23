@@ -40,6 +40,7 @@ class RunRecord:
     strip_affected_messages: int = 0      # messages a strip pass would touch
     strip_stripped_chars: int = 0         # chars a strip pass would remove
     quality_report: dict | None = None
+    prose: str | None = None              # subjects+bodies, for inter-run diversity
 
 
 def canonical_hash(campaign) -> str:
@@ -128,4 +129,8 @@ def run_spec(spec, adapter, run_index: int, mission: dict) -> RunRecord:
     record.strip_affected_messages = quality.strip_stats.affected_messages
     record.strip_stripped_chars = quality.strip_stats.stripped_chars
     record.quality_report = quality.model_dump()
+    record.prose = "\n".join(
+        part for m in campaign.messages
+        for part in ((m.subject or ""), m.body) if part
+    )
     return record

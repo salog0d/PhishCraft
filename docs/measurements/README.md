@@ -3,6 +3,10 @@
 This directory holds the experiment artifacts. Three clarifications matter
 before these numbers go into the paper.
 
+For the full map of **which metric is scored against which truth** (and which
+are validated vs only self-consistent), see
+[`metrics-catalog.md`](metrics-catalog.md).
+
 ## 1. Two link-consistency numbers, not one
 
 The original failure (`link_consistency` 10/10) and the "after" result (0/10)

@@ -244,7 +244,14 @@ async def _run_async(
     for _ in range(REFINE_EXTRA_ATTEMPTS):
         structural, quality, label_mismatches = _structural_issues(
             campaign, report, spec)
-        flags_before = quality.n_flags
+        # Severity the loop actually tries to move: structural flags PLUS the
+        # label mismatches that trigger it. Measuring only ``n_flags`` was
+        # dishonest — label_mismatch is not counted in n_flags, so a round
+        # fired for a label mismatch could never register as "improved",
+        # reporting refinement_improved=False by construction (ponytail: see
+        # the audit — 216/228 fired rounds were scored as non-improving only
+        # because the success metric was blind to the signal that fired them).
+        severity_before = quality.n_flags + len(label_mismatches)
         reasons = []
         if raw_link_violations(campaign) > 0:
             reasons.append("link_violation")
@@ -284,9 +291,13 @@ async def _run_async(
             )
             info["refinement_improved"] = False
             break
-        # Measure whether the refinement actually reduced quality flags.
-        _, quality_after, _ = _structural_issues(campaign, report, spec)
-        info["refinement_improved"] = quality_after.n_flags < flags_before
+        # Measure whether the refinement actually reduced the severity it fired
+        # on — structural flags + label mismatches, the same quantity used to
+        # decide to refine — not just n_flags.
+        _, quality_after, labels_after = _structural_issues(
+            campaign, report, spec)
+        severity_after = quality_after.n_flags + len(labels_after)
+        info["refinement_improved"] = severity_after < severity_before
     return campaign, report, info
 
 

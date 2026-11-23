@@ -12,16 +12,18 @@ Design:
   ``OLLAMA_API_BASE`` — leave it unset for localhost, or point it at a remote
   Ollama (an Azure VM serving models) for cloud runs. The critic follows
   ``ADK_CRITIC_MODEL`` the same way.
-- **Temperatures**: 0.0, 0.5, 1.0.
-- **Cases**: 12 fixed specs (3 per pretext, from 4 base pretexts).
-- **Repetitions**: 3 per combination, seeds 101/202/303, the same across
-  conditions.
+- **Temperature**: fixed at 0.0 (one axis at a time — only the model varies).
+- **Cases**: 10 fixed specs.
+- **Repetitions**: 5 per combination, seeds 101/202/303/404/505, the same
+  across conditions.
 - **Output limit**: 4096 tokens per generator call.
 
-So each (model, temperature, case) runs at 3 seeds → 3*3*12*3 = 324 executions.
-The case is invariant: same recipient, context, entities, constraints and
-content requirements. Only model, temperature and seed change; every execution
-starts in a fresh session.
+So the matrix is 10 specs × 5 seeds × N model families (≥2) → with the 3
+default families, 10*5*3 = 150 executions. The case is invariant: same
+recipient, context, entities, constraints and content requirements. Only the
+model and seed change; every execution starts in a fresh session. Each run
+records its model tag+quant, temperature, seed, prompt hash (``trace.prompt_sha256``)
+and the harness ``git_commit``.
 
 Every run goes through the real ADK pipeline (``agent.driver``) and the
 post-run quality scan (``quality_agent.scan``). Besides the final artifacts,
@@ -34,13 +36,13 @@ Usage:
     # verify the provider actually receives temperature / max_tokens / seed
     python scripts/reliability_matrix.py --verify
 
-    # run everything over a remote Ollama (e.g. an Azure VM):
+    # THE ONE COMMAND to run on the VM — runs the full matrix, then writes
+    # the report (summary.md/json, master_table.json) and charts/ itself:
     #   OLLAMA_API_BASE=http://<vm-ip>:11434 \
-    #   python scripts/reliability_matrix.py \
-    #     --models ollama/qwen3:14b,ollama/llama3.1:70b
+    #   python scripts/reliability_matrix.py
     python scripts/reliability_matrix.py --out experiment/reliability-<ts>
 
-    # regenerate the aggregate report + summaries from a finished/paused run
+    # (only if you need to re-aggregate a finished/paused run by hand)
     python scripts/reliability_matrix.py --report experiment/reliability-<ts>
 """
 
@@ -73,8 +75,8 @@ DEFAULT_MODELS = (
     "llama3.1:8b-q4km-20261110",     # 8.0B Q4_K_M — sha256 667b0c19…
     "phi4-mini:3.8b-q4km-20261110",  # 3.8B Q4_K_M — sha256 3c168af1…
 )
-TEMPERATURES = (0.0, 0.5, 1.0)
-SEEDS = (101, 202, 303)
+TEMPERATURES = (0.0,)  # one axis at a time: temperature fixed, only model varies
+SEEDS = (101, 202, 303, 404, 505)  # 5 fixed seeds (rep count for the CIs)
 MAX_TOKENS = 4096
 LANGUAGE = "en"
 START_AT = "2026-08-20T09:00:00Z"
@@ -82,31 +84,61 @@ FOLLOWUP_MINUTES = 75
 DEFAULT_RUN_TIMEOUT_S = 600
 DEFAULT_WORKERS = 1
 
-# 12 fixed cases: (case_id, pretext, tone, difficulty, recipient_id).
-# 3 specs per pretext, from 4 base pretexts. Recipients are fixed so every
-# model receives the identical case and recipient.
+# 10 fixed cases: one representative spec per pretext (tono + difficulty + recipient).
+# Recipients are fixed so every model receives the identical case and recipient.
+# NOTE (rule 3 — discriminating specs): these must actually produce raw
+# violations in the pre-assembler output, or the matrix measures nothing. If a
+# finished run shows raw_link_violations == 0 across every model, the specs were
+# too easy — harden them (shorter deadlines, more cross-channel refs, stricter
+# link/entity constraints) before trusting the result. Config alone can't
+# guarantee this; it's a content-design call that needs a run to confirm.
 CASES = (
-    # executive_request (BEC)
-    ("C01", "executive_request", "urgent", "medium", 40),
-    ("C02", "executive_request", "authoritative", "hard", 24),
-    ("C03", "executive_request", "neutral", "easy", 11),
-    # invoice_payment (BEC)
-    ("C04", "invoice_payment", "friendly", "easy", 40),
-    ("C05", "invoice_payment", "authoritative", "medium", 24),
-    ("C06", "invoice_payment", "urgent", "hard", 11),
-    # account_suspension (consumer)
-    ("C07", "account_suspension", "urgent", "hard", 41),
-    ("C08", "account_suspension", "neutral", "medium", 25),
-    ("C09", "account_suspension", "friendly", "easy", 12),
-    # password_reset (consumer)
-    ("C10", "password_reset", "neutral", "easy", 41),
-    ("C11", "password_reset", "urgent", "medium", 25),
-    ("C12", "password_reset", "authoritative", "hard", 12),
+    # executive_request (BEC — manager impersonation)
+    ("C01", "executive_request", "urgent", "hard", 40),
+    # invoice_payment (BEC — supplier)
+    ("C02", "invoice_payment", "authoritative", "hard", 24),
+    # account_suspension (consumer — bank)
+    ("C03", "account_suspension", "urgent", "hard", 41),
+    # password_reset (consumer — help desk)
+    ("C04", "password_reset", "neutral", "medium", 25),
+    # shared_document (BEC — manager impersonation)
+    ("C05", "shared_document", "neutral", "medium", 40),
+    # it_support (help desk)
+    ("C06", "it_support", "authoritative", "hard", 41),
+    # hr_notice (People Ops)
+    ("C07", "hr_notice", "authoritative", "medium", 40),
+    # package_delivery (carrier)
+    ("C08", "package_delivery", "neutral", "medium", 24),
+    # shared_document (BEC — manager impersonation), harder variant
+    ("C09", "shared_document", "urgent", "hard", 24),
+    # it_support (help desk), urgent variant
+    ("C10", "it_support", "urgent", "hard", 25),
 )
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+import functools
+from hashlib import sha256
+
+
+@functools.lru_cache(maxsize=1)
+def git_commit() -> str:
+    """HEAD commit of the harness code, stamped on the plan and every run so a
+    number can always be traced back to the code that produced it (rule 6).
+    ``unknown`` if git is unavailable or the tree isn't a repo."""
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT,
+            stderr=subprocess.DEVNULL).decode().strip()
+        dirty = subprocess.call(
+            ["git", "diff", "--quiet"], cwd=REPO_ROOT,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return sha + ("-dirty" if dirty else "")
+    except Exception:  # noqa: BLE001 — provenance is best-effort, never fatal
+        return "unknown"
 
 
 def sanitize(name: str) -> str:
@@ -123,9 +155,17 @@ def model_slug(model: str) -> str:
     base name with the version suffix (``-q4km-YYYYMMDD``) stripped.
     """
     name = model_ref(model)[1]  # bare name, no provider/ prefix
-    # drop a trailing frozen-tag suffix like `-q4km-20261110` or `-Q4_K_M`
+    # Drop trailing version/quantization suffixes: `-q4km-20261110`, `-Q4_K_M`,
+    # and the longer Minstral-style `-instruct-2512-q8_0`. Multi-pass so a name
+    # with several stacked suffixes shrinks to its base (still unique per model).
     import re
-    name = re.sub(r"-[A-Za-z0-9]{2,}-?\d{8}$", "", name)
+    for _ in range(3):
+        shorter = re.sub(
+            r"-(?:instruct|q\d[_-]?k?_?m?|q\d_\d|fp16|f\d{8}|\d{8}|\d{4}-\d{2}-\d{2})"
+            r"[A-Za-z0-9_-]*$", "", name)
+        if shorter == name:
+            break
+        name = shorter
     return sanitize(name)
 
 
@@ -252,6 +292,7 @@ def build_plan(models: list[str]) -> dict:
         run["run_id"] += f"-t{run['temperature']}-s{run['seed']}"
     return {
         "generated_at": utc_now(),
+        "git_commit": git_commit(),
         "design": {
             "models": models,
             "temperatures": list(TEMPERATURES),
@@ -300,6 +341,7 @@ def trace_summary(run_dir: Path) -> dict:
     records = _read_trace(run_dir / "llm_trace.jsonl")
     first_raw = None
     first_readable = None
+    prompt_sha256 = None  # hash of the first generator prompt actually sent
     generator_calls = critic_calls = 0
     prompt_tokens = completion_tokens = total_tokens = 0
     total_s = 0.0
@@ -319,9 +361,16 @@ def trace_summary(run_dir: Path) -> dict:
         text = response.get("text")
         if text and first_raw is None and agent != "critic":
             first_raw = text
+        if prompt_sha256 is None and agent != "critic":
+            req = rec.get("request") or {}
+            blob = json.dumps(
+                [req.get("system_instruction"), req.get("contents")],
+                sort_keys=True, ensure_ascii=False).encode()
+            prompt_sha256 = sha256(blob).hexdigest()
     # first_readable is set by the runner from the parsed campaign; leave None.
     return {
         "first_raw_response": first_raw,
+        "prompt_sha256": prompt_sha256,
         "generator_calls": generator_calls,
         "critic_calls": critic_calls,
         "prompt_tokens": prompt_tokens,
@@ -407,6 +456,7 @@ def run_one(run: dict, mission: dict, out: Path, run_timeout: int,
         "difficulty": run["difficulty"],
         "recipient_id": run["recipient_id"],
         "config": spec,
+        "git_commit": git_commit(),
         "status": "ok",
         "ran_at": utc_now(),
         "error": None,
@@ -514,7 +564,52 @@ def run_child(out: Path, model_index: int, run_timeout: int) -> int:
 # --------------------------------------------------------------------------- #
 
 
-def run_parent(out: Path, models: list[str], workers: int, run_timeout: int) -> int:
+def preflight(models: list[str]) -> tuple[bool, str]:
+    """Fail loud *before* a multi-hour run: every matrix model must answer on
+    the real host, and the critic must be reachable (or its absence declared).
+
+    This is the guard for the class of silent failure that has cost whole runs:
+    a model tag that does not resolve, a critic that falls back without anyone
+    noticing. It makes the run refuse to start on an unreachable model instead
+    of burning hours producing runs that are secretly degraded.
+
+    Returns ``(all_models_ok, critic_status)``; ``critic_status`` is one of
+    ``reachable`` / ``MISSING (will fall back to the generator)``.
+    """
+    print("preflight:")
+    all_ok = True
+    for model in models:
+        result = verify_provider(model)
+        if "error" in result:
+            print(f"  model {model}: UNREACHABLE — {result['error']}")
+            all_ok = False
+        else:
+            print(f"  model {model}: ok (eval_count={result.get('eval_count')})")
+
+    from agent.config import DEFAULT_CRITIC_MODEL
+
+    critic = os.getenv("ADK_CRITIC_MODEL", DEFAULT_CRITIC_MODEL)
+    critic_status = "reachable"
+    if critic.startswith("ollama/"):
+        probe = verify_provider(critic[len("ollama/"):])
+        if "error" in probe:
+            critic_status = "MISSING (will fall back to the generator)"
+    print(f"  critic {critic}: {critic_status}")
+    return all_ok, critic_status
+
+
+def run_parent(out: Path, models: list[str], workers: int, run_timeout: int,
+               skip_preflight: bool = False) -> int:
+    if not skip_preflight:
+        models_ok, critic_status = preflight(models)
+        if not models_ok:
+            print("\nABORT: one or more models are unreachable on the configured "
+                  "host. Fix the model tag / OLLAMA_API_BASE, or pass "
+                  "--skip-preflight to run anyway.")
+            return 2
+        if critic_status != "reachable":
+            print("  (proceeding; the critic fallback is now explicit, not silent)")
+        print()
     out.mkdir(parents=True, exist_ok=True)
     plan = build_plan(models)
     (out / "plan.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
@@ -545,8 +640,18 @@ def run_parent(out: Path, models: list[str], workers: int, run_timeout: int) -> 
                     .read_text(encoding="utf-8").splitlines()
                 for line in lines[-6:]:
                     print(f"     {line}")
-    print(f"\ndone. aggregate report:")
-    print(f"  python scripts/reliability_matrix.py --report {out}")
+    # One command on the VM: aggregate the report and render the charts here,
+    # so the run leaves a finished dataset (summary.md + charts/) with no
+    # follow-up step to remember.
+    print("\nruns done — aggregating report + charts")
+    run_report(out)
+    try:
+        subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "reliability_charts.py"),
+             str(out)], cwd=REPO_ROOT, check=True)
+    except Exception as exc:  # noqa: BLE001 — charts are optional, data is the deliverable
+        print(f"  (charts skipped: {type(exc).__name__}: {exc})")
+    print(f"\ndone. dataset: {out}")
     return 0
 
 
@@ -608,6 +713,30 @@ def _key(r):
     return (r["model"], r["temperature"])
 
 
+def wilson_ci(successes: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
+    """95% Wilson score interval for a binomial proportion (None if n == 0).
+
+    Wilson, not the normal approximation: with the 3-seeds-per-cell counts in
+    this matrix the normal interval is wrong (it can exceed [0, 1] and badly
+    under-covers near 0 and 1). The interval is what makes a between-model
+    difference interpretable — two cells whose CIs overlap are *not* a
+    distinguishable result at this sample size, no matter how far the point
+    rates sit apart.
+    """
+    if n == 0:
+        return None
+    p = successes / n
+    denom = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
+    return (round(max(0.0, center - half), 4), round(min(1.0, center + half), 4))
+
+
+def _ci_str(ci: tuple[float, float] | None) -> str:
+    """Render a CI tuple for a markdown cell."""
+    return "—" if ci is None else f"[{ci[0]:.2f}–{ci[1]:.2f}]"
+
+
 def analyze(rows: list[dict]) -> dict:
     # 1. Delivery guarantee by model x temperature (completed runs only).
     comp = defaultdict(lambda: {"total": 0, "ok": 0, "failed": 0,
@@ -662,6 +791,7 @@ def analyze(rows: list[dict]) -> dict:
                 "compliance_rate_among_completed": (
                     round(v["all_passed"] / v["completed"], 4) if v["completed"] else None
                 ),
+                "compliance_ci95": wilson_ci(v["all_passed"], v["completed"]),
             }
             for (m, t), v in sorted(comp.items())
         },
@@ -689,6 +819,7 @@ def analyze(rows: list[dict]) -> dict:
                 "flagged": v[0],
                 "total": v[1],
                 "flag_rate": round(v[0] / v[1], 4) if v[1] else None,
+                "flag_rate_ci95": wilson_ci(v[0], v[1]),
             }
             for (m, t), v in sorted(flags.items())
         },
@@ -701,6 +832,7 @@ def analyze(rows: list[dict]) -> dict:
                     "total": sum(c.values()),
                     "match_rate": round(c.get("ok", 0) / sum(c.values()), 4)
                     if sum(c.values()) else None,
+                    "match_rate_ci95": wilson_ci(c.get("ok", 0), sum(c.values())),
                 }
                 for label, c in sorted(labels.items())
             }
@@ -737,14 +869,15 @@ def markdown(comp: dict, n_total: int) -> str:
         "Rates are computed **among completed campaigns**; failed/timeout runs are",
         "listed separately so a guarantee number never hides dropped executions.",
         "",
-        "| model × temperature | total | completed | failed/timeout | all_passed | rate (completed) |",
-        "|---|---|---|---|---|---|",
+        "| model × temperature | total | completed | failed/timeout | all_passed | rate (completed) | 95% CI |",
+        "|---|---|---|---|---|---|---|",
     ]
     for label, v in comp["compliance"].items():
         rate = v["compliance_rate_among_completed"]
         lines.append(
             f"| {label} | {v['total']} | {v['completed']} | {v['failed_or_timeout']} "
-            f"| {v['all_passed']} | {rate if rate is not None else '—'} |"
+            f"| {v['all_passed']} | {rate if rate is not None else '—'} "
+            f"| {_ci_str(v.get('compliance_ci95'))} |"
         )
     lines += ["", "## 2 · Errors by constraint (model × temperature × check)", ""]
     if comp["errors_by_constraint"]:
@@ -774,26 +907,34 @@ def markdown(comp: dict, n_total: int) -> str:
               "Share of completed campaigns with ≥1 quality-scan finding (the",
               "content-quality signal, independent of the structural guarantee).",
               "",
-              "| model × temperature | flagged | total | flag rate |",
-              "|---|---|---|---|"]
+              "| model × temperature | flagged | total | flag rate | 95% CI |",
+              "|---|---|---|---|---|"]
     for label, v in comp["structural_flags"].items():
         lines.append(
             f"| {label} | {v['flagged']} | {v['total']} | "
-            f"{v['flag_rate'] if v['flag_rate'] is not None else '—'} |"
+            f"{v['flag_rate'] if v['flag_rate'] is not None else '—'} | "
+            f"{_ci_str(v.get('flag_rate_ci95'))} |"
         )
     lines += ["", "## 5 · Spec compliance (label audit) — separate from the guarantee", "",
               "`match_rate` = share of completed campaigns whose generated prose",
               "the deterministic labeler reads as matching the requested label.",
               "(`unverifiable` = no signal; not counted as a match.)",
               "",
-              "| model × temperature | label | ok | mismatch | unverifiable | match rate |",
-              "|---|---|---|---|---|---|"]
+              "> **Reading the CI:** two rows whose 95% CIs overlap are **not** a",
+              "> distinguishable difference at this sample size — the point rates",
+              "> can look far apart and still be noise. The CI also depends on the",
+              "> labeler being calibrated (see the gold-label validation); it",
+              "> quantifies sampling error, not the labeler's own bias.",
+              "",
+              "| model × temperature | label | ok | mismatch | unverifiable | match rate | 95% CI |",
+              "|---|---|---|---|---|---|---|"]
     for label, labels in comp["spec_compliance"].items():
         for lab, v in labels.items():
             lines.append(
                 f"| {label} | {lab} | {v['ok']} | {v['mismatch']} "
                 f"| {v['unverifiable']} | "
-                f"{v['match_rate'] if v['match_rate'] is not None else '—'} |"
+                f"{v['match_rate'] if v['match_rate'] is not None else '—'} | "
+                f"{_ci_str(v.get('match_rate_ci95'))} |"
             )
     lines += ["", "## 6 · Achieved distribution (honest relabel)", "",
               "What the labeler actually *detected* in the delivered prose,",
@@ -961,6 +1102,8 @@ def main() -> None:
                         help="model children running in parallel")
     parser.add_argument("--run-timeout", type=int, default=DEFAULT_RUN_TIMEOUT_S,
                         help="wall-clock seconds per execution")
+    parser.add_argument("--skip-preflight", action="store_true",
+                        help="skip the model/critic reachability check before the run")
     args = parser.parse_args()
 
     if args.verify:
@@ -985,7 +1128,8 @@ def main() -> None:
         raise SystemExit("no models — is the Ollama daemon running?")
     out = Path(args.out or
                f"experiment/reliability-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
-    raise SystemExit(run_parent(out, models, args.workers, args.run_timeout))
+    raise SystemExit(run_parent(out, models, args.workers, args.run_timeout,
+                                skip_preflight=args.skip_preflight))
 
 
 if __name__ == "__main__":

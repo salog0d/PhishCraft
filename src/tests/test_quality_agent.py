@@ -314,3 +314,24 @@ def test_quality_suite_writes_both_artifacts(tmp_path):
     assert "Automated label audit" in summary
     assert "Stage-direction stripping" in summary
     assert payload["n_runs"] == 10
+
+
+def test_diversity_detects_mode_collapse():
+    """Identical campaigns -> max similarity, min distinct-2; varied -> lower/higher."""
+    from quality_agent.diversity import diversity_report
+
+    same = ["Reset your password now to keep access"] * 4
+    varied = [
+        "Reset your password now to keep access",
+        "The quarterly invoice is overdue, please remit payment",
+        "Your package could not be delivered, confirm the address",
+        "HR open enrollment closes Friday, review your benefits",
+    ]
+    d_same = diversity_report(same)
+    d_varied = diversity_report(varied)
+    assert d_same["mean_pairwise_similarity"] == 1.0
+    assert d_varied["mean_pairwise_similarity"] < d_same["mean_pairwise_similarity"]
+    assert d_varied["distinct_2"] > d_same["distinct_2"]
+    # Degenerate inputs never raise.
+    assert diversity_report([])["distinct_2"] is None
+    assert diversity_report(["only one"])["mean_pairwise_similarity"] is None
